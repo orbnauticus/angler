@@ -67,10 +67,10 @@ class ColorStreamHandler(logging.StreamHandler):
 class AnglerFormatter(logging.Formatter):
 	def format(self, record):
 		record.levelname = record.levelname.rjust(5)
-		record.name = record.name.center(max(len(x) for x in logging.Logger.manager.loggerDict))
+		record.name = record.name.rjust(max(len(x) for x in logging.Logger.manager.loggerDict))
 		return logging.Formatter.format(self, record)
 
-formatter = AnglerFormatter('%(levelname)s %(name)s: %(message)s')
+formatter = AnglerFormatter('%(name)s: %(message)s')
 csh = ColorStreamHandler()
 csh.setFormatter(formatter)
 logging.root.addHandler(csh)
