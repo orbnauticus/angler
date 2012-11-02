@@ -1,27 +1,25 @@
 #!/usr/bin/env python
 
 from ..common import *
-#from ..system import Path
 
 import apt
 import multiprocessing
 import os
 import sys
 
-import logging
-logger = logging.getLogger('apt')
+logger = getLogger('apt')
+
+apt_cache = apt.cache.Cache()
 
 class UpdatePackageCache(Definition):
-	args = ['cache']
-
-	update = bool_param('update', False)
+	update = param.boolean('update', False)
 
 	def runners(self):
-		if self.update():
+		if self.update() or any(x.marked_install for x in apt_cache.get_changes()):
 			yield self.do_update
 
 	def do_update(self):
-		logging.debug('Updating package cache')
+		logger.debug('Updating package cache')
 		apt_cache.update()
 
 class SilentAcquireProgress(apt.progress.base.AcquireProgress):
@@ -30,12 +28,10 @@ class SilentAcquireProgress(apt.progress.base.AcquireProgress):
 class SilentInstallProgress(apt.progress.base.InstallProgress):
 	pass
 
-class InstallPackages(Definition):
-	force = bool_param('force', False)
-
-	changes_found = bool_param('changes_found', False)
-
-	upgrade = bool_param('upgrade', False)
+class CommitPackageChanges(Definition):
+	force = param.boolean('force', False)
+	changes_found = param.boolean('changes_found', False)
+	upgrade = param.boolean('upgrade', False)
 
 	def do_upgrade(self):
 		logger.debug('Upgrading packages')
@@ -56,43 +52,24 @@ class InstallPackages(Definition):
 		proc.start()
 		proc.join()
 		logger.debug('Finished committing changes')
+		apt_cache.open()
 
 	def runners(self):
 		if self.force() or apt_cache.get_changes():
-			if self.update():
-				yield self.do_update
 			if self.upgrade():
 				yield self.do_upgrade
 			yield self.do_install
 
-apt_cache = apt.cache.Cache()
-
-Cache = UpdatePackageCache()
-Commit = InstallPackages()
-Cache > Commit
-
 class Package(Definition):
 	def __init__(self, name):
-		Commit > self
-		self.status = 'installed'
+		Definition.__init__(self, name)
+		CommitPackageChanges().requires(self)
+		self.requires(UpdatePackageCache())
+		self.dep_standin = CommitPackageChanges()
 
-	@param('installed')
-	def status(self, new):
-		new = new.lower()
-		if new == 'installed':
-			Cache.update = True
-			try:
-				apt_cache[self.name].mark_install()
-			except KeyError:
-				pass
-			return new
-		elif new == 'removed':
-			try:
-				apt_cache[self.name].mark_delete()
-			except KeyError:
-				pass
-			return new
-		raise ValueError, "Invalid Package status: %r" % new
+	@param.enum('installed', 'removed', default='installed')
+	def state(self, new):
+		return new.lower()
 
 	@param()
 	def source(self, new):
@@ -108,10 +85,29 @@ class Package(Definition):
 		RUN('dpkg', '-i', self.source().path)
 
 	def runners(self):
-		if self.source() is not None:
-			try:
-				p = apt_cache[self.name]
-			except KeyError:
-				yield self.dpkg_install
+		try:
+			source, state, package = self.source(), self.state(), apt_cache[self.name]
+		except KeyError:
+			source, state, package = self.source(), self.state(), None
+		if source is None and package is None:
+			raise KeyError, "Unable to find package %r" % self.name
+		elif source is not None and state == 'installed' and package is None:
+			yield self.dpkg_install
+		elif source is not None and state == 'installed' and package is not None:
+			pass
+		elif source is not None and state == 'removed' and package is not None:
+			yield package.mark_delete
+		elif source is not None and state == 'removed' and package is None:
+			pass
+		elif source is None and state == 'installed' and package is not None:
+			if package.is_installed:
+				pass
+			else:
+				yield package.mark_install
+		elif source is None and state == 'removed' and package is not None:
+			if package.is_installed:
+				yield package.mark_delete
+			else:
+				pass
 		else:
-			yield lambda:None
+			raise Exception, "Unhandled case in Package %r" % (source, state, package, package.is_installed)
