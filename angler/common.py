@@ -53,6 +53,9 @@ class Manifest(collections.MutableMapping):
 	def __init__(self):
 		self.defs = collections.defaultdict(dict)
 		self.sorter = topsort.Topsort()
+		self.skipped = 0
+		self.runned = 0
+		self.errors = 0
 
 	def __getitem__(self, key):
 		return self.defs[key]
@@ -79,9 +82,13 @@ class Manifest(collections.MutableMapping):
 
 	def clear(self):
 		self.__init__()
-		self.skipped = 0
-		self.runned = 0
-		self.errors = 0
+
+	def __enter__(self):
+		self.clear()
+
+	def __exit__(self, obj, exc, tb):
+		if obj is None:
+			self.run()
 
 	@staticmethod
 	def format_items(items):
@@ -95,10 +102,8 @@ class Manifest(collections.MutableMapping):
 		return self.skipped + self.runned + self.errors
 
 	def run(self, dryrun=False):
-		self.skipped = 0
-		self.runned = 0
-		self.errors = 0
-		logger = logging.getLogger('manifest')
+		self.skipped = self.runned = self.errors = 0
+		logger = logging.getLogger(' ')
 		try:
 			for node in list(self.sorter):
 				if node is None:
@@ -170,6 +175,7 @@ class param(ProxyVal):
 	def __init__(self, default=None):
 		if inspect.isfunction(default):
 			self.default = default
+			self.name = default.func_name
 		else:
 			self.default = lambda s:default
 
@@ -183,6 +189,10 @@ class param(ProxyVal):
 		self.default = func
 		return self
 
+	def validator(self, func):
+		self.validate = func
+		return self
+
 	def __get__(self, inst, owner):
 		if inst is None:
 			return self
@@ -193,7 +203,11 @@ class param(ProxyVal):
 			inst.unrequires(self.__get__(inst, None))
 		except KeyError:
 			pass
-		result = self.validate(inst, value)
+		try:
+			result = self.validate(inst, value)
+		except InvalidParam, e:
+			
+			raise e
 		if isinstance(result, (fact, Definition)):
 			inst.requires(result)
 		inst.manifest[inst.args][self.name] = result
@@ -202,6 +216,8 @@ class param(ProxyVal):
 	@classmethod
 	def enum(cls, *values, **kwargs):
 		default = kwargs.pop('default', None)
+		if default not in values:
+			values = values + (default,)
 		def decorator(validate):
 			def validator(self, new):
 				new = validate(self, new)
@@ -220,33 +236,10 @@ class param(ProxyVal):
 		return cls(func)(validate)
 
 	@classmethod
-	def boolean(cls, default=True):
+	def boolean(cls, name, default=True):
 		valid = lambda s,n:bool(n)
 		valid.func_name = name
 		return cls(default)(valid)
-
-def enum_param(*values, **kwargs):
-	default = kwargs.pop('default', None)
-	def decorator(validate):
-		def validator(self, new):
-			new = validate(self, new)
-			if new not in values:
-				raise ValueError, "Invalid value %s must be one of %s" % (self.__class__.__name__, values)
-			return new
-		validator.func_name = validate.func_name
-		return param(default)(validator)
-	return decorator
-
-def ro_param(func):
-	def validate(self, new):
-		raise ValueError, "Parameter %s is read-only" % func.func_name
-	validate.func_name = func.func_name
-	return param(func)(validate)
-
-def bool_param(name, default):
-	valid = lambda s,n:bool(n)
-	valid.func_name = name
-	return param(default)(valid)
 
 class ManifestMetaClass(_abcoll.ABCMeta):
 	def __new__(cls, name, parents, attr):
@@ -256,43 +249,52 @@ class ManifestMetaClass(_abcoll.ABCMeta):
 			arg_names = inspect.getargspec(attr['__init__']).args[1:]
 		except KeyError:
 			arg_names = attr.pop('args', ())
-		def_props = dict((k,v) for k,v in attr.items() if isinstance(v, param))#inspect.isdatadescriptor(v))
+		def_props = dict((k,v) for k,v in attr.items() if isinstance(v, param))
 		init = attr.get('__init__', lambda *a,**k:None)
-		#if not any(issubclass(p, Proxy) for p in parents):
-			#parents = (Proxy,) + parents
-		def __init__(self, *args, **kwargs):
-			if len(args) > len(arg_names):
-				raise TypeError, "Expected %i arguments, got %i" % (len(arg_names), len(args))
-			self.__dict__['manifest'] = manifest
-			self.__dict__['args'] = (name,) + args
-			Proxy.__init__(self, manifest[self.args])
-			for key in kwargs:
-				def_props[key].__set__(self, kwargs[key])
-			init(self, *args)
-			manifest.add(None, self)
+		if '__init__' not in attr:
+			def __init__(self, *args, **kwargs):
+				if len(args) > len(arg_names):
+					raise TypeError, "Expected %i arguments, got %i" % (len(arg_names), len(args))
+				for key in kwargs:
+					def_props[key].__set__(self, kwargs[key])
+				super(self.__class__, self).__init__(*args)
+			attr['__init__'] = __init__
 		for i,arg in enumerate(arg_names):
 			attr.setdefault(arg, property(lambda self:self.args[i+1]))
-		attr['__init__'] = __init__
+		if inspect.getargspec(attr['__init__']).keywords is None:
+			init = attr['__init__']
+			def __init__(self, *args, **kwargs):
+				init(self, *args)
+				self.update(**kwargs)
+			attr['__init__'] = __init__
 		return super(ManifestMetaClass, cls).__new__(cls, name, parents, attr)
 
 class Definition(Proxy):
 	__metaclass__ = ManifestMetaClass
+	manifest = manifest
+	def __init__(self, *args, **kwargs):
+		self.args = (self.__class__.__name__,) + args
+		Proxy.__init__(self, self.manifest[self.args])
+		self.manifest.add(None, self)
+
+	def update(self, **kwargs):
+		for key in kwargs:
+			setattr(self, key, kwargs[key])
+
 	def __hash__(self):
 		return hash(self.args)
 
 	def __repr__(self):
 		return '%s(%s)' % (self.args[0], ', '.join(map(repr,self.args[1:])))
 
-	def conforms(self):
-		raise NotImplementedError
-
-	def run(self):
-		raise NotImplementedError
-
 	def requires(self, other):
+		self = getattr(self, 'dep_standin', self)
+		other = getattr(other, 'dep_standin', other)
 		self.manifest.add(self, other)
 
 	def unrequires(self, other):
+		self = getattr(self, 'dep_standin', self)
+		other = getattr(other, 'dep_standin', other)
 		self.manifest.discard(self, other)
 
 	def __lt__(self, other):
@@ -351,6 +353,7 @@ class mode(int):
 
 class Path(Definition):
 	def __init__(self, path):
+		Definition.__init__(self, path)
 		try:
 			self.requires(self.parent)
 		except OSError:
@@ -368,7 +371,7 @@ class Path(Definition):
 		else:
 			raise OSError, "Root has no parent"
 
-	@enum_param('folder', 'file', 'absent', 'link')
+	@param.enum('folder', 'file', 'absent', 'link')
 	def state(self, new):
 		return new.lower()
 	@state.fetch
@@ -383,7 +386,10 @@ class Path(Definition):
 		else:
 			return 'absent'
 
-	@param()
+	@param
+	def owner(self):
+		return User.fromuid(os.stat(self.path).st_uid)
+	@owner.validator
 	def owner(self, new):
 		if isinstance(new, (User, fact)):
 			return new
@@ -392,11 +398,11 @@ class Path(Definition):
 		elif isinstance(new, int):
 			return User.fromuid(new)
 		raise ValueError, "Invalid user: %r" % new
-	@owner.fetch
-	def owner(self):
-		return User.fromuid(os.stat(self.path).st_uid)
 
-	@param()
+	@param
+	def group(self):
+		return Group.fromgid(os.stat(self.path).st_gid)
+	@group.validator
 	def group(self, new):
 		if isinstance(new, (Group, fact)):
 			return new
@@ -405,21 +411,18 @@ class Path(Definition):
 		elif isinstance(new, int):
 			return Group.fromgid(new)
 		raise ValueError, "Invalid group: %r" % new
-	@group.fetch
-	def group(self):
-		return Group.fromgid(os.stat(self.path).st_gid)
 
-	@param()
-	def mode(self, new):
-		if isinstance(new, int):
-			return mode(new)
-		raise ValueError, "Invalid mode: %r" % new
-	@mode.fetch
+	@param
 	def mode(self):
 		if os.path.exists(self.path):
 			return mode(os.stat(self.path).st_mode)
 		else:
 			return mode(0644)
+	@mode.validator
+	def mode(self, new):
+		if isinstance(new, int):
+			return mode(new)
+		raise ValueError, "Invalid mode: %r" % new
 
 	@param()
 	def content(self, new):
@@ -434,23 +437,23 @@ class Path(Definition):
 			return None
 
 	def create_folder(self):
-		logger.debug('os.mkdir(%r)', self.path)
+		getLogger('path').debug('os.mkdir(%r)', self.path)
 		os.mkdir(self.path)
 
 	def create_file(self):
-		logger.debug("open(%r, 'wb').write(~%s~)", self.path, md5sum(self.content()))
+		getLogger('path').debug("open(%r, 'wb').write(~%s~)", self.path, md5sum(self.content()))
 		open(self.path, 'wb').write(self.content())
 
 	def create_link(self):
-		logger.debug("os.symlink(%r, %r)", self.path, self.content())
+		getLogger('path').debug("os.symlink(%r, %r)", self.path, self.content())
 		os.symlink(self.content(), self.path)
 
 	def remove(self):
 		if os.path.isdir(self.path):
-			logger.debug('shutil.rmtree(%r)', self.path)
-			self.manifest.safe or shutil.rmtree(self.path)
+			getLogger('path').debug('shutil.rmtree(%r)', self.path)
+			shutil.rmtree(self.path)
 		else:
-			logger.debug('os.unlink(%r)', self.path)
+			getLogger('path').debug('os.unlink(%r)', self.path)
 			os.unlink(self.path)
 
 	def chown(self):
@@ -461,20 +464,21 @@ class Path(Definition):
 		if s.st_gid != self.group().gid():
 			gid = self.group().gid()
 		if (uid, gid) != (-1, -1):
-			logger.debug("os.lchown(%r, %r, %r)", self.path, uid, gid)
+			getLogger('path').debug("os.lchown(%r, %r, %r)", self.path, uid, gid)
 			os.lchown(self.path, uid, gid)
 
 	def chmod(self):
 		m = self.mode()
 		if self.state() == 'folder':
 			m = m.x_folder()
-		logger.debug("os.lchmod(%r, %o)", self.path, m)
+		getLogger('path').debug("os.lchmod(%r, %o)", self.path, m)
 
 	def runners(self):
 		state = self.state()
 		exists = os.path.exists(self.path)
 		if state == 'absent':
-			yield self.remove
+			if exists:
+				yield self.remove
 		else:
 			m = self.mode()
 			if state == 'folder':
@@ -518,9 +522,10 @@ def getpwd(name):
 
 class User(Definition):
 	def __init__(self, name):
+		Definition.__init__(self, name)
 		self < Group(name)
 
-	present = bool_param('present', True)
+	present = param.boolean('present', True)
 
 	@param()
 	def password(self, new):
@@ -659,7 +664,7 @@ def getgr(name):
 class Group(Definition):
 	args = ['name']
 
-	present = bool_param('present', True)
+	present = param.boolean('present', True)
 	
 	@param(lambda self:getgr(self.name).gr_gid)
 	def gid(self, new):
@@ -685,7 +690,6 @@ class Group(Definition):
 		if self.gid():
 			cmd.extend(['-g', self.gid()])
 		cmd.append(self.name)
-		logger.debug(' '.join(map(str,cmd)))
 		RUN(*cmd)
 
 	def delete_group(self):
@@ -731,19 +735,19 @@ class Service(Definition):
 		open('/var/run/%s.pid').read()
 
 class System(Definition):
-	@ro_param
+	@param.read_only
 	def platform(self):
 		return 'linux'
 
-	@ro_param
+	@param.read_only
 	def distribution(self):
 		return 'ubuntu'
 
-	@ro_param
+	@param.read_only
 	def domain(self):
 		return socket.getfqdn()
 
-	@ro_param
+	@param.read_only
 	def hostname(self):
 		return socket.gethostname()
 

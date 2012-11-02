@@ -2,7 +2,7 @@
 
 import logging
 from . import logcolors
-from .common import manifest, collection, Path, File, Folder, Link, User, AdminUser, SysUser, Group, System, Package, Host
+from .common import *
 
 run = manifest.run
 clear = manifest.clear

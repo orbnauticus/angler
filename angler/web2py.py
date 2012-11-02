@@ -14,6 +14,7 @@ web2py = web2py()
 
 class Server(Definition):
 	def __init__(self):
+		Definition.__init__(self)
 		git_repo = 'git://github.com/mdipierro/web2py.git'
 		apache2.Mod('wsgi')
 		apache2.Mod('rewrite')
@@ -24,7 +25,8 @@ class Server(Definition):
 
 class Site(Definition):
 	def __init__(self, name):
-		pass
+		Definition.__init__(self, name)
+
 
 	@param()
 	def app_repo(self, new):
@@ -70,7 +72,7 @@ class Site(Definition):
 			return new
 		raise ValueError, "Invalid version_regex: %r" % new
 
-	enabled = bool_param('enabled', True)
+	enabled = param.boolean('enabled', True)
 
 	@param()
 	def post_merge(self, new):
@@ -93,6 +95,7 @@ class Site(Definition):
 class app(Definition):
 	__name__ = 'web2py.app'
 	def __init__(self, root):
+		Definition.__init__(self, root)
 		web2py() > self
 		root.child('__init__.py', state='file') > self
 		folders = ('cache', 'controllers', 'cron', 'databases', 'errors',

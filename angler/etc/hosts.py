@@ -7,7 +7,7 @@ from angler import *
 Hosts = File('/etc/hosts')#, owner=User('root'), group=User('root'))
 
 class Aliases(Definition):
-	@ro_param
+	@param.read_only
 	def aliases(self):
 		result = {}
 		for line in Hosts.content().split('\n'):
@@ -26,9 +26,10 @@ Aliases = Aliases()
 
 class Alias(Definition):
 	def __init__(self, name):
+		Definition.__init__(self, name)
 		Aliases > self > Hosts
 
-	present = bool_param('present', True)
+	present = param.boolean('present', True)
 
 	@param('127.0.0.1')
 	def target(self, new):

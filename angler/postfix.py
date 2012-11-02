@@ -9,4 +9,4 @@ class conf(Definition):
 	def value(self, new):
 		return new
 
-	comment = bool_param('comment', False)
+	comment = param.boolean('comment', False)
