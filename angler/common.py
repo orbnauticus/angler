@@ -424,17 +424,17 @@ class Path(Definition):
 			return mode(new)
 		raise ValueError, "Invalid mode: %r" % new
 
-	@param()
-	def content(self, new):
-		if isinstance(new, (basestring, fact)) or new is None:
-			return new
-		raise ValueError, "Invalid file content: %r" % new
-	@content.fetch
+	@param
 	def content(self):
 		if os.path.exists(self.path):
 			return open(self.path, 'rb').read()
 		else:
 			return None
+	@content.validator
+	def content(self, new):
+		if isinstance(new, (basestring, fact)) or new is None:
+			return new
+		raise ValueError, "Invalid file content: %r" % new
 
 	def create_folder(self):
 		getLogger('path').debug('os.mkdir(%r)', self.path)
@@ -527,22 +527,28 @@ class User(Definition):
 
 	present = param.boolean('present', True)
 
-	@param()
+	@param
+	def password(self):
+		return getpwd(self.name).pw_passwd
+	@password.validator
 	def password(self, new):
 		if isinstance(new, basestring):
 			return new
 		raise ValueError, "Invalid password: %r" % new
-	@password.fetch
-	def password(self):
-		return getpwd(self.name).pw_passwd
 
-	@param(lambda self:getpwd(self.name).pw_uid)
+	@param
+	def uid(self):
+		return getpwd(self.name).pw_uid)
+	@uid.validator
 	def uid(self, new):
 		if not isinstance(new, (fact, int)):
 			raise ValueError, "Invalid uid: %r" % new
 		return new
 
-	@param(lambda self:Group.fromgid(getpwd(self.name).pw_gid))
+	@param
+	def group(self):
+		return Group.fromgid(getpwd(self.name).pw_gid)
+	@group.validator
 	def group(self, new):
 		if isinstance(new, (Group, fact)):
 			return new
@@ -552,43 +558,49 @@ class User(Definition):
 			return Group.fromgid(new)
 		raise ValueError, "Invalid Group: %r" % new
 
-	@param(lambda self:getpwd(self.name).pw_gecos)
+	@param
+	def comment(self):
+		return getpwd(self.name).pw_gecos
+	@comment.validator
 	def comment(self, new):
 		if not isinstance(new, basestring):
 			raise ValueError, "Invalid comment: %r" % new
 		return new
 
-	@param()
+	@param
+	def homedir(self):
+		try:
+			return Folder(pwd.getpwnam(self.name).pw_dir)
+		except KeyError:
+			return Folder('/home/%s' % self.name, owner=self)
+	@homedir.validator
 	def homedir(self, new):
 		if isinstance(new, Path):
 			return new
 		elif isinstance(new, basestring):
 			return Folder(new)
 		raise ValueError, "Invalid homedir: %r" % new
-	@homedir.fetch
-	def homedir(self):
-		try:
-			return Folder(pwd.getpwnam(self.name).pw_dir)
-		except KeyError:
-			return Folder('/home/%s' % self.name, owner=self)
 
-	@param(lambda self:getpwd(self.name).pw_shell or '/bin/sh')
+	@param
+	def shell(self):
+		return getpwd(self.name).pw_shell or '/bin/sh'
+	@shell.validator
 	def shell(self, new):
 		if isinstance(new, basestring):
 			return new
 		raise ValueError, "Invalid shell: %r" % new
 
-	@param()
-	def groups(self, new):
-		if isinstance(new, (list,tuple,set)):
-			return set(new)
-		raise ValueError, "Invalid groups: %r" % new
-	@groups.fetch
+	@param
 	def groups(self):
 		try:
 			return set(Group(g.gr_name) for g in grp.getgrall() if self.name in g.gr_mem)
 		except KeyError:
 			return set()
+	@groups.validator
+	def groups(self, new):
+		if isinstance(new, (list,tuple,set)):
+			return set(new)
+		raise ValueError, "Invalid groups: %r" % new
 
 	@classmethod
 	def fromuid(cls, uid):
@@ -666,7 +678,10 @@ class Group(Definition):
 
 	present = param.boolean('present', True)
 	
-	@param(lambda self:getgr(self.name).gr_gid)
+	@param
+	def gid(self):
+		return getgr(self.name).gr_gid
+	@gid.validator
 	def gid(self, new):
 		if isinstance(new, int):
 			return new
@@ -716,13 +731,13 @@ class Exec(Definition):
 	args = ['name']
 
 	@param
+	def command(self):
+		return self.name
+	@command.validator
 	def command(self, new):
 		if isinstance(new, basestring):
 			return new
 		raise ValueError, "Invalid command: %r" % new
-	@command.fetch
-	def command(self):
-		return self.name
 
 class Service(Definition):
 	args = ['name']
