@@ -84,6 +84,14 @@ class Package(Definition):
 	def dpkg_install(self):
 		RUN('dpkg', '-i', self.source().path)
 
+	def mark_install(self):
+		logger.debug('Marking package %r for installation', self.name)
+		apt_cache[self.name].mark_install()
+
+	def mark_delete(self):
+		logger.debug('Marking package %r for removal', self.name)
+		apt_cache[self.name].mark_delete()
+
 	def runners(self):
 		try:
 			source, state, package = self.source(), self.state(), apt_cache[self.name]
@@ -96,17 +104,17 @@ class Package(Definition):
 		elif source is not None and state == 'installed' and package is not None:
 			pass
 		elif source is not None and state == 'removed' and package is not None:
-			yield package.mark_delete
+			yield self.mark_delete
 		elif source is not None and state == 'removed' and package is None:
 			pass
 		elif source is None and state == 'installed' and package is not None:
 			if package.is_installed:
 				pass
 			else:
-				yield package.mark_install
+				yield self.mark_install
 		elif source is None and state == 'removed' and package is not None:
 			if package.is_installed:
-				yield package.mark_delete
+				yield self.mark_delete
 			else:
 				pass
 		else:
