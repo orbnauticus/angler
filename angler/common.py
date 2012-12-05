@@ -323,7 +323,7 @@ class fact(object):
 		try:
 			value = proxy[self.param.name]
 		except KeyError:
-			value = proxy[self.param.name] = self.param.default(self.inst)
+			value = self.param.default(self.inst)
 		return value() if isinstance(value, fact) else value
 
 	def __getattr__(self, name):
@@ -538,7 +538,7 @@ class User(Definition):
 
 	@param
 	def uid(self):
-		return getpwd(self.name).pw_uid)
+		return getpwd(self.name).pw_uid
 	@uid.validator
 	def uid(self, new):
 		if not isinstance(new, (fact, int)):
