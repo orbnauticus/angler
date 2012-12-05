@@ -2,10 +2,27 @@
 PROXY=http://10.42.0.1:3142
 SUITE=precise
 
-all:
+VERSION=$(shell python setup.py --version)
+FULLNAME=$(shell python setup.py --fullname)
+PACKAGES=python-angler_$(VERSION)_all.deb
+
+all: build
+
+.PHONY: all test kvm-test clean deb install-deb build
+
+clean:
+	@debuild clean
+	@python setup.py clean
+
+build:
 	@python setup.py build
 
-.PHONY: all test kvm-test
+deb:
+	@if python setup.py sdist; then cd dist; tar -xf $(FULLNAME).tar.gz; cd $(FULLNAME); debuild -i -uc -us; fi
+	@echo "Packages can be found under dist/"
+
+install-deb:
+	@cd dist; dpkg -i $(PACKAGES)
 
 test: chroot
 	@cp -R angler chroot/usr/lib/python2.7

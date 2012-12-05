@@ -1,0 +1,34 @@
+Source: angler
+Section: python
+Priority: extra
+Maintainer: Ryan Marquardt <ryan@integralws.com>
+Build-Depends: cdbs (>= 0.4.62), debhelper (>= 7.4), python (>= 2.7), python-support
+Standards-Version: 3.9.3
+
+Package: python-angler
+Architecture: all
+Depends: ${misc:Depends}, ${python:Depends}, python-apt
+Description: Provisioner
+ .
+ Blah
+
+Package: python-angler-apache2
+Architecture: all
+Depends: ${misc:Depends}, ${python:Depends}, python-angler, apache2
+Description: Provision apache2 servers
+ .
+ Blah
+
+Package: python-angler-postfix
+Architecture: all
+Depends: ${misc:Depends}, ${python:Depends}, python-angler, postfix
+Description: Provision postfix servers
+ .
+ Blah
+
+Package: python-angler-mysql
+Architecture: all
+Depends: ${misc:Depends}, ${python:Depends}, python-angler, mysql-server
+Description: Provision mysql servers
+ .
+ Blah

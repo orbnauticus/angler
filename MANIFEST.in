@@ -1,0 +1,5 @@
+include COPYING
+include Makefile
+include debian/*
+include debian/*/*
+include test/*

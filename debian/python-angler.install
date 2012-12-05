@@ -1,0 +1,8 @@
+debian/tmp/usr/lib/python*/*-packages/angler/__init__.py
+debian/tmp/usr/lib/python*/*-packages/angler/common.py
+debian/tmp/usr/lib/python*/*-packages/angler/globals.py
+debian/tmp/usr/lib/python*/*-packages/angler/logcolors.py
+debian/tmp/usr/lib/python*/*-packages/angler/process.py
+debian/tmp/usr/lib/python*/*-packages/angler/topsort.py
+debian/tmp/usr/lib/python*/*-packages/angler/package/__init__.py
+debian/tmp/usr/lib/python*/*-packages/angler/package/libapt.py
