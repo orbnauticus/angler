@@ -49,6 +49,11 @@ class Topsort(object):
 		self.vertices[parent].add(child)
 
 	def resolve(self, *nodes):
+		if not self.vertices:
+			def emptygen():
+				return
+				yield
+			return emptygen()
 		data = dict(self.vertices)
 		extra = reduce(set.union, data.values()) - set(data.keys())
 		data.update({item:set() for item in extra})
@@ -64,6 +69,9 @@ class Topsort(object):
 		for level in self.resolve():
 			for el in level:
 				yield el
+
+	def __contains__(self, (a, b)):
+		return a in self.vertices and b in self.vertices[a]
 
 	def add(self, parent, *children):
 		p = self.vertices.setdefault(parent, set())
