@@ -97,25 +97,15 @@ class Package(Definition):
 			source, state, package = self.source(), self.state(), apt_cache[self.name]
 		except KeyError:
 			source, state, package = self.source(), self.state(), None
-		if source is None and package is None:
-			raise KeyError, "Unable to find package %r" % self.name
-		elif source is not None and state == 'installed' and package is None:
-			yield self.dpkg_install
-		elif source is not None and state == 'installed' and package is not None:
-			pass
-		elif source is not None and state == 'removed' and package is not None:
-			yield self.mark_delete
-		elif source is not None and state == 'removed' and package is None:
-			pass
-		elif source is None and state == 'installed' and package is not None:
-			if package.is_installed:
-				pass
-			else:
+		if source is None:
+			if package is None:
+				raise KeyError, "Unable to find package %r" % self.name
+			elif state == 'installed' and not package.is_installed:
 				yield self.mark_install
-		elif source is None and state == 'removed' and package is not None:
-			if package.is_installed:
+			elif state == 'removed' and package.is_installed:
 				yield self.mark_delete
-			else:
-				pass
 		else:
-			raise Exception, "Unhandled case in Package %r" % (source, state, package, package.is_installed)
+			if state == 'installed' and package is None:
+				yield self.dpkg_install
+			elif state == 'removed' and package is not None:
+				yield self.mark_delete
