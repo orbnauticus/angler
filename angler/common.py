@@ -775,6 +775,11 @@ class Host(object):
 	def __nonzero__(self):
 		return self.match == '' or re.match(self.match, System.hostname()) is not None
 
+class Cache(Definition):
+	#TODO: Cache is a remote file which is fetched whenever it's needed and kept
+	#around as long as cached files don't exceed a configurable size quota.
+	pass
+
 from logging import getLogger, debug, info, warning, error, critical
 
 from package import Package
