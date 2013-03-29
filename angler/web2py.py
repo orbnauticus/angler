@@ -21,7 +21,7 @@ class Server(Definition):
 		apache2.Mod('ssl')
 		Package('git-core')
 		Folder('/var/cache/puppet/web2py')
-		
+			
 
 class Site(Definition):
 	def __init__(self, name):

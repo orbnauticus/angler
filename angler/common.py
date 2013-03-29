@@ -116,8 +116,14 @@ class Manifest(collections.MutableMapping):
 					try:
 						counts = False
 						for runner in runners:
+							if isinstance(runner, tuple):
+								runner, reason = runner
+							else:
+								reason = None
 							if not counts:
 								logger.info('Running %s %s', node, self.format_items(node.items()))
+								if reason:
+									logger.info('  (%s)', reason)
 							counts = True
 							self.runned += 1
 							dryrun or runner()
@@ -234,12 +240,20 @@ class param(ProxyVal):
 			raise ValueError, "Parameter %s is read-only" % func.func_name
 		validate.func_name = func.func_name
 		return cls(func)(validate)
+		
+	ro = read_only
 
 	@classmethod
 	def boolean(cls, name, default=True):
 		valid = lambda s,n:bool(n)
 		valid.func_name = name
 		return cls(default)(valid)
+		
+	@classmethod
+	def no_default(cls, validate):
+		def func(self):
+			return
+		return cls(func)(validate)
 
 class ManifestMetaClass(_abcoll.ABCMeta):
 	def __new__(cls, name, parents, attr):
@@ -351,6 +365,72 @@ class mode(int):
 	def x_folder(self):
 		return mode(self | ((self & 0444) >> 2))
 
+import base64
+import hashlib
+class Cache(Definition):
+	#TODO: Cache is a remote file which is fetched whenever it's needed and kept
+	#around as long as cached files don't exceed a configurable size quota.
+	quota = None
+	basedir = '/var/cache/angler'
+
+	def __init__(self, uri):
+		Definition.__init__(self, uri)
+		self.requires(Folder(self.basedir))
+
+	@param.read_only
+	def path(self):
+		return os.path.join(self.basedir, hashlib.md5(self.uri)) 
+
+	def fetch_uri(self):
+		if not os.path.exists(self.path):
+			w = open(self.path, 'wb')
+			u = urllib2.urlopen(self.uri)
+			b = u.read(4096)
+			while b:
+				w.write(b)
+				b = u.read(4096)
+
+	def runners(self):
+		yield self.fetch_uri
+
+from urlparse import urlparse as uriparse
+
+def stream(fsrc, fdest):
+	fdest.write(fsrc.read())
+	#buff = fsrc.read(4096)
+	#while buff:
+		#fdest.write(buff)
+		#buff = fsrc.read(4096)
+	#fsrc.close()
+	#fdest.close()
+
+class uri(str):
+	"""
+	
+	>>> u = uri('file:///home/user/angler')
+	>>> u
+	'file:///home/user/angler'
+	>>> u.scheme
+	'file'
+	>>> u.domain
+	''
+	>>> u.path
+	'/home/user/angler'
+	"""
+	@property
+	def scheme(self):
+		return self.partition('://')[0]
+	
+	@property
+	def domain(self):
+		return self.partition('://')[2].partition('/')[0]
+		
+	@property
+	def path(self):
+		return ''.join(self.partition('://')[2].partition('/')[1:])
+
+import urllib2
+
 class Path(Definition):
 	def __init__(self, path):
 		Definition.__init__(self, path)
@@ -436,13 +516,31 @@ class Path(Definition):
 			return new
 		raise ValueError, "Invalid file content: %r" % new
 
+	@param.no_default
+	def source(self, new):
+		return uri(new)
+
 	def create_folder(self):
 		getLogger('path').debug('os.mkdir(%r)', self.path)
 		os.mkdir(self.path)
 
 	def create_file(self):
-		getLogger('path').debug("open(%r, 'wb').write(~%s~)", self.path, md5sum(self.content()))
-		open(self.path, 'wb').write(self.content())
+		source = self.source()
+		log = getLogger('path')
+		if source:
+			if source.scheme == 'file':
+				log.debug('copying %r to %r', source.path, self.path)
+				shutil.copy(source.path, self.path)
+			elif source.scheme in ('http','https'):
+				log.debug('downloading %r to %r', source, self.path)
+				#log.debug('got %r', urllib2.urlopen(source).read())
+				#with open(self.path, 'wb') as dest:
+					#dest.write(urllib2.urlopen(source).read())
+				stream(urllib2.urlopen(str(source)), open(self.path, 'wb'))
+		else:
+			content = self.content()
+			log.debug("writing ~%s to %r", md5sum(content), self.path)
+			open(self.path, 'wb').write(content)
 
 	def create_link(self):
 		getLogger('path').debug("os.symlink(%r, %r)", self.path, self.content())
@@ -484,15 +582,19 @@ class Path(Definition):
 			if state == 'folder':
 				m = m.x_folder()
 				if not exists:
-					yield self.create_folder
+					yield self.create_folder, "Folder doesn't exist"
 			elif state == 'file':
-				if self.content() is None:
-					open(self.path)
-				elif not exists or open(self.path,'rb').read() != self.content():
-					yield self.create_file
+				if self.source() and not exists:
+					yield self.create_file, "File doesn't exist"
+				elif self.content() is None:
+					open(self.path,'wb')
+				elif not exists:
+					yield self.create_file, "File doesn't exist"
+				elif open(self.path,'rb').read() != self.content():
+					yield self.create_file, "File contents don't match"
 			elif state == 'link':
 				if not exists:
-					yield self.create_link
+					yield self.create_link, "Link doesn't exist"
 			s = os.stat(self.path)
 			if s.st_uid != self.owner().uid() or s.st_gid != self.group.gid():
 				yield self.chown
@@ -774,11 +876,6 @@ class Host(object):
 		
 	def __nonzero__(self):
 		return self.match == '' or re.match(self.match, System.hostname()) is not None
-
-class Cache(Definition):
-	#TODO: Cache is a remote file which is fetched whenever it's needed and kept
-	#around as long as cached files don't exceed a configurable size quota.
-	pass
 
 from logging import getLogger, debug, info, warning, error, critical
 
