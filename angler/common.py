@@ -74,6 +74,7 @@ class Manifest(collections.MutableMapping):
 
 	def add(self, obj, dep):
 		self.sorter.add(obj, dep)
+		#Check for cycles
 		for i in self.sorter:
 			pass
 
