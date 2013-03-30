@@ -217,6 +217,8 @@ class param(ProxyVal):
 			raise e
 		if isinstance(result, (fact, Definition)):
 			inst.requires(result)
+		if self.name in inst.manifest[inst.args] and inst.manifest[inst.args][self.name] != value:
+			raise ValueError, "parameter %r of %r already set to %r" % (self.name, inst, value)
 		inst.manifest[inst.args][self.name] = result
 		return result
 
