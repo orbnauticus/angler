@@ -883,15 +883,15 @@ class Service(Definition):
 
 	def start(self):
 		getLogger('service').debug('starting %r', self.name)
-		getLogger('service').info('%s\n%s', *RUN('service', self.name, 'start'))
+		getLogger('service').debug('%s\n%s', *RUN('service', self.name, 'start'))
 
 	def stop(self):
 		getLogger('service').debug('stopping %r', self.name)
-		getLogger('service').info('%s\n%s', *RUN('service', self.name, 'stop'))
+		getLogger('service').debug('%s\n%s', *RUN('service', self.name, 'stop'))
 
 	def restart(self):
 		getLogger('service').debug('restarting %r', self.name)
-		getLogger('service').info('%s\n%s', *RUN('service', self.name, 'restart'))
+		getLogger('service').debug('%s\n%s', *RUN('service', self.name, 'restart'))
 
 	def reload(self):
 		RUN('service', self.name, 'reload')
