@@ -43,7 +43,7 @@ class Alias(Definition):
 	def remove_from_hosts(self):
 		raise NotImplementedError
 
-	def runners(self):
+	def runners(self, notifiers):
 		if self.present():
 			if self.name in Aliases.aliases():
 				if Aliases.aliases()[self.name] != self.target():

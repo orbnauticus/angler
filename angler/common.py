@@ -25,11 +25,11 @@ def md5sum(content):
 	return hashlib.md5(content).hexdigest()
 
 class ReturnCode(Exception):
-	def __init__(self, cmd, expected, got, (stdout, stderr)):
-		Exception.__init__(self, "Expected %i, got %i from command %r" % (expected, got, ' '.join(map(str,cmd))))
+	def __init__(self, cmd, expected, code, (stdout, stderr)):
+		Exception.__init__(self, "Expected %i, got %i from command %r" % (expected, code, ' '.join(map(str,cmd))))
 		self.cmd = cmd
 		self.expected = expected
-		self.got = got
+		self.code = code
 		self.stdout = stdout
 		self.stderr = stderr
 
@@ -53,9 +53,10 @@ class Manifest(collections.MutableMapping):
 	def __init__(self):
 		self.defs = collections.defaultdict(dict)
 		self.sorter = topsort.Topsort()
+		self.listeners = collections.defaultdict(set)
 		self.skipped = 0
-		self.runned = 0
 		self.errors = 0
+		self.history = set()
 
 	def __getitem__(self, key):
 		return self.defs[key]
@@ -81,6 +82,10 @@ class Manifest(collections.MutableMapping):
 	def discard(self, obj, dep):
 		self.sorter.discard(obj, dep)
 
+	def notify(self, obj, listener):
+		self.add(listener, obj)
+		self.listeners[listener].add(obj)
+
 	def clear(self):
 		self.__init__()
 
@@ -102,8 +107,13 @@ class Manifest(collections.MutableMapping):
 	def def_count(self):
 		return self.skipped + self.runned + self.errors
 
+	@property
+	def runned(self):
+		return len(self.history)
+
 	def run(self, dryrun=False):
-		self.skipped = self.runned = self.errors = 0
+		self.skipped = self.errors = 0
+		self.history = set()
 		logger = logging.getLogger(' ')
 		try:
 			for node in list(self.sorter):
@@ -111,12 +121,12 @@ class Manifest(collections.MutableMapping):
 					logger.info('Finished processing %i definitions (%i run, %i skipped, %i errors)', self.def_count, self.runned, self.skipped, self.errors)
 				elif not isinstance(node, fact):
 					try:
-						runners = node.runners()
+						runners = node.runners(set(l for l in self.listeners[node] if l in self.history))
 					except AttributeError:
 						continue
 					try:
 						counts = False
-						for runner in runners:
+						for runner in runners or ():
 							if isinstance(runner, tuple):
 								runner, reason = runner
 							else:
@@ -126,7 +136,7 @@ class Manifest(collections.MutableMapping):
 								if reason:
 									logger.info('  (%s)', reason)
 							counts = True
-							self.runned += 1
+							self.history.add(node)
 							dryrun or runner()
 						if not counts:
 							self.skipped += 1
@@ -330,6 +340,15 @@ class Definition(Proxy):
 			other.requires(self)
 		return True
 
+	def notifies(self, other):
+		self.manifest.notify(self, other)
+
+	def __rshift__(self, other):
+		self.notifies(other)
+
+	def __lshift__(self, other):
+		other.notifies(self)
+
 class fact(object):
 	def __init__(self, inst, param):
 		self.inst = inst
@@ -393,7 +412,7 @@ class Cache(Definition):
 				w.write(b)
 				b = u.read(4096)
 
-	def runners(self):
+	def runners(self, notifiers):
 		yield self.fetch_uri
 
 from urlparse import urlparse as uriparse
@@ -574,7 +593,7 @@ class Path(Definition):
 			m = m.x_folder()
 		getLogger('path').debug("os.lchmod(%r, %o)", self.path, m)
 
-	def runners(self):
+	def runners(self, notifiers):
 		state = self.state()
 		exists = os.path.exists(self.path)
 		if state == 'absent':
@@ -738,7 +757,7 @@ class User(Definition):
 	def delete(self):
 		RUN('userdel', self.name)
 
-	def runners(self):
+	def runners(self, notifiers):
 		try:
 			entry = pwd.getpwnam(self.name)
 		except KeyError:
@@ -819,7 +838,7 @@ class Group(Definition):
 	def set_gid(self):
 		raise NotImplementedError
 
-	def runners(self):
+	def runners(self, notifiers):
 		try:
 			entry = grp.getgrnam(self.name)
 		except KeyError:
@@ -852,7 +871,40 @@ class Service(Definition):
 		return new.lower()
 	@state.fetch
 	def state(self):
-		open('/var/run/%s.pid').read()
+		try:
+			RUN('service', self.name, 'status', expect=0)
+		except ReturnCode, r:
+			return 'stopped'
+		else:
+			return 'running'
+
+	def get_state(self):
+		return 'stopped'
+
+	def start(self):
+		getLogger('service').debug('starting %r', self.name)
+		getLogger('service').info('%s\n%s', *RUN('service', self.name, 'start'))
+
+	def stop(self):
+		getLogger('service').debug('stopping %r', self.name)
+		getLogger('service').info('%s\n%s', *RUN('service', self.name, 'stop'))
+
+	def restart(self):
+		getLogger('service').debug('restarting %r', self.name)
+		getLogger('service').info('%s\n%s', *RUN('service', self.name, 'restart'))
+
+	def reload(self):
+		RUN('service', self.name, 'reload')
+
+	def runners(self, notifiers):
+		if notifiers:
+			yield self.restart
+		else:
+			state = self.get_state()
+			if state == 'running' and self.state() == 'stopped':
+				yield self.stop
+			elif state == 'stopped' and self.state() == 'running':
+				yield self.start
 
 class System(Definition):
 	@param.read_only

@@ -44,7 +44,7 @@ class Apache2File(Path):
 			return od(new)
 		raise InvalidParam
 
-	def runners(self):
+	def runners(self, notifiers):
 		print self.content()
 		raise Exception
 		yield

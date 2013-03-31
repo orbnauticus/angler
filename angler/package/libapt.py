@@ -14,7 +14,7 @@ apt_cache = apt.cache.Cache()
 class UpdatePackageCache(Definition):
 	update = param.boolean('update', False)
 
-	def runners(self):
+	def runners(self, notifiers):
 		if self.update() or any(x.marked_install for x in apt_cache.get_changes()):
 			yield self.do_update
 
@@ -54,7 +54,7 @@ class CommitPackageChanges(Definition):
 		logger.debug('Finished committing changes')
 		apt_cache.open()
 
-	def runners(self):
+	def runners(self, notifiers):
 		if self.force() or apt_cache.get_changes():
 			if self.upgrade():
 				yield self.do_upgrade
@@ -92,7 +92,7 @@ class Package(Definition):
 		logger.debug('Marking package %r for removal', self.name)
 		apt_cache[self.name].mark_delete()
 
-	def runners(self):
+	def runners(self, notifiers):
 		try:
 			source, state, package = self.source(), self.state(), apt_cache[self.name]
 		except KeyError:
