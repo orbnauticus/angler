@@ -74,11 +74,5 @@ class Manifest(object):
         if cycle:
             raise CycleError(cycle)
 
-    def detect_cycle(self):
-        cursor = self.connection.execute("""
-            SELECT * FROM cycle;
-            """)
-        return cursor.fetchall()
-
 
 default_manifest = 'angler.manifest'
