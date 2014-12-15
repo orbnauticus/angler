@@ -1,0 +1,15 @@
+#!/usr/bin/env python3
+
+from angler.core import setup, default_manifest
+
+
+if __name__ == '__main__':
+    import argparse
+
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('--manifest', '-m', default=default_manifest)
+
+    args = parser.parse_args()
+
+    setup(args.database)

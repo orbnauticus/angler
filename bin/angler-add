@@ -1,0 +1,29 @@
+#!/usr/bin/env python3
+
+from angler.core import Manifest, default_manifest
+
+
+if __name__ == '__main__':
+    import argparse
+
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('uri')
+    parser.add_argument('value')
+
+    parser.add_argument('--manifest', '-m', default=default_manifest)
+    parser.add_argument('--before', '-b', action='append', default=[])
+    parser.add_argument('--after', '-a', action='append', default=[])
+
+    args = parser.parse_args()
+
+    manifest = Manifest(args.manifest)
+
+    manifest.insert_node(args.uri, args.value)
+
+    for node in args.before:
+        manifest.insert_edge(args.uri, node)
+
+    for node in args.after:
+        manifest.insert_edge(node, args.uri)
+
