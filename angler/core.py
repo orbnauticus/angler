@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import os
 import sqlite3
 
 
@@ -12,37 +13,15 @@ def setup(database):
           source NOT NULL REFERENCES node,
           sink NOT NULL REFERENCES node,
           PRIMARY KEY(source, sink) ON CONFLICT REPLACE);
-
-        CREATE VIEW topological_order AS
-        WITH RECURSIVE source(uri, level) AS (
-            SELECT uri, 0
-            FROM node
-            WHERE uri NOT IN (SELECT sink FROM `edge`)
-        UNION
-            SELECT edge.sink, level+1
-            FROM source, edge, node as sink
-            WHERE source.uri=edge.source AND sink.uri=edge.sink)
-        SELECT uri, value, level
-        FROM node JOIN source USING(uri)
-        GROUP BY uri ORDER BY level, uri;
-
-        CREATE VIEW cycle_first AS
-        SELECT * FROM node
-        WHERE uri NOT IN (SELECT uri FROM topological_order) LIMIT 1;
-
-        CREATE VIEW cycle AS
-        WITH RECURSIVE source(uri) AS (
-            SELECT uri FROM cycle_first
-        UNION
-            SELECT edge.sink FROM source, edge, node as sink
-            WHERE source.uri=edge.source AND sink.uri=edge.sink)
-        SELECT uri FROM node JOIN source USING(uri);
-
         """)
-    for name in os.listdir('fixture'):
+    for name in os.listdir('modules'):
         if name.endswith('.sql'):
             connection.executescript(
-                open(os.path.join('fixture', name)).read())
+                open(os.path.join('modules', name)).read())
+
+
+class CycleError(Exception):
+    pass
 
 
 class Manifest(object):
@@ -51,23 +30,54 @@ class Manifest(object):
 
     def insert_node(self, uri, value):
         self.connection.execute(
-            "INSERT INTO node VALUES (?,?);", [uri, value])
+            """INSERT INTO node VALUES (?,?);""", [uri, value])
         self.connection.commit()
 
     def insert_edge(self, source, sink):
         self.connection.execute(
-            "INSERT INTO edge VALUES (?,?);", [source, sink])
+            """INSERT INTO edge VALUES (?,?);""", [source, sink])
         self.connection.commit()
 
-    def __iter__(self):
-        cursor = self.connection.execute(
-            "SELECT level, uri, value FROM topological_order;")
-        return iter(cursor)
+    def sorted(self):
+        self.connection.executescript("""
+            CREATE TEMPORARY TABLE node_order(
+            source, sink, leaf INT DEFAULT 0);
+
+            INSERT INTO node_order(source, sink)
+            SELECT source, sink FROM edge;
+
+            -- Create fake edges so that nodes without outgoing edges are
+            --  reported in the final pass
+
+            INSERT INTO node_order(source, leaf)
+            SELECT DISTINCT sink, 1 FROM edge;
+            """)
+        while True:
+            nodes_with_no_incoming_edges = set(row for row in
+                self.connection.execute("""
+                    SELECT DISTINCT source, value
+                    FROM node_order, node ON source=uri
+                    WHERE source NOT IN (
+                        SELECT sink FROM node_order WHERE leaf = 0);
+                    """).fetchall())
+            if not nodes_with_no_incoming_edges:
+                break
+            yield nodes_with_no_incoming_edges
+            self.connection.execute("""
+                DELETE FROM node_order WHERE source NOT IN (
+                SELECT sink FROM node_order WHERE leaf = 0);
+                """)
+        cycle = self.connection.execute("""
+            SELECT source, sink FROM node_order WHERE leaf = 0;
+            """).fetchall()
+        self.connection.execute("""DROP TABLE node_order;""")
+        if cycle:
+            raise CycleError(cycle)
 
     def detect_cycle(self):
         cursor = self.connection.execute("""
             SELECT * FROM cycle;
-        """)
+            """)
         return cursor.fetchall()
 
 

@@ -14,5 +14,6 @@ if __name__ == '__main__':
 
     manifest = Manifest(args.manifest)
 
-    for level, uri, value in manifest:
-        print('{}: {} = {}'.format(level, uri, value))
+    for slice_of_nodes in manifest.sorted():
+        for uri, value in slice_of_nodes:
+            print('{} = {!r}'.format(uri, value))

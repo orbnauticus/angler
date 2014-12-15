@@ -23,5 +23,3 @@ if __name__ == '__main__':
 
     for source, sink in zip(sources, sinks):
         manifest.insert_edge(source, sink)
-
-    manifest.commit()
