@@ -2,6 +2,11 @@
 
 import os
 import sqlite3
+from collections import namedtuple
+from inspect import getmembers
+from importlib import import_module
+
+from .plugin import Plugin
 
 
 def setup(database):
@@ -24,6 +29,37 @@ class CycleError(Exception):
     pass
 
 
+Edge = namedtuple('Edge', 'source sink')
+
+Node = namedtuple('Node', 'uri value')
+
+
+class Session(object):
+    def __init__(self, manifest):
+        self.nodes = set(Node(*row) for row in manifest.connection.execute("""
+            SELECT uri, value FROM node"""))
+        self.edges = set(Edge(*row) for row in manifest.connection.execute("""
+            SELECT source, sink FROM edge"""))
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        sinks = set(edge.sink for edge in self.edges)
+        nodes_with_no_incoming_edges = set(
+            node for node in self.nodes if node.uri not in sinks)
+        self.nodes -= nodes_with_no_incoming_edges
+        for node in nodes_with_no_incoming_edges:
+            self.edges -= set(edge for edge in self.edges
+                              if edge.source == node.uri)
+        if nodes_with_no_incoming_edges:
+            return nodes_with_no_incoming_edges
+        elif self.nodes:
+            raise CycleError(self.nodes)
+        else:
+            raise StopIteration
+
+
 class Manifest(object):
     def __init__(self, database):
         self.connection = sqlite3.connect(database)
@@ -38,41 +74,19 @@ class Manifest(object):
             """INSERT INTO edge VALUES (?,?);""", [source, sink])
         self.connection.commit()
 
+    def load_plugins(self):
+        handlers = {}
+        for name in os.listdir('modules'):
+            if name.endswith('.py'):
+                module = import_module('modules.{}'.format(name[:-3]))
+                for name, value in getmembers(module):
+                    if issubclass(value, Plugin):
+                        for scheme in value.schemes:
+                            handlers[scheme] = value
+        return handlers
+
     def sorted(self):
-        self.connection.executescript("""
-            CREATE TEMPORARY TABLE node_order(
-            source, sink, leaf INT DEFAULT 0);
-
-            INSERT INTO node_order(source, sink)
-            SELECT source, sink FROM edge;
-
-            -- Create fake edges so that nodes without outgoing edges are
-            --  reported in the final pass
-
-            INSERT INTO node_order(source, leaf)
-            SELECT DISTINCT sink, 1 FROM edge;
-            """)
-        while True:
-            nodes_with_no_incoming_edges = set(row for row in
-                self.connection.execute("""
-                    SELECT DISTINCT source, value
-                    FROM node_order, node ON source=uri
-                    WHERE source NOT IN (
-                        SELECT sink FROM node_order WHERE leaf = 0);
-                    """).fetchall())
-            if not nodes_with_no_incoming_edges:
-                break
-            yield nodes_with_no_incoming_edges
-            self.connection.execute("""
-                DELETE FROM node_order WHERE source NOT IN (
-                SELECT sink FROM node_order WHERE leaf = 0);
-                """)
-        cycle = self.connection.execute("""
-            SELECT source, sink FROM node_order WHERE leaf = 0;
-            """).fetchall()
-        self.connection.execute("""DROP TABLE node_order;""")
-        if cycle:
-            raise CycleError(cycle)
+        return Session(self)
 
 
 default_manifest = 'angler.manifest'
