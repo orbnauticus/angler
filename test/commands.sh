@@ -13,5 +13,5 @@ debug angler-add exec://run-script "bash bin/script"
 debug angler-add path:///home/user/.bashrc file --before exec://run-script
 debug angler-order package://bash exec://run-script
 debug angler-run
-
+debug angler-run --swap
 rm angler.manifest

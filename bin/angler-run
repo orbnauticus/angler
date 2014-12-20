@@ -9,11 +9,15 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--manifest', '-m', default=default_manifest)
+    parser.add_argument('--swap', '-s', action='store_true',
+                        help='Reverse order of nodes in each stage.'
+                             ' Useful for checking if there are any missing'
+                             ' relationships')
 
     args = parser.parse_args()
 
     manifest = Manifest(args.manifest)
 
-    for level, slice_of_nodes in enumerate(manifest.sorted()):
-        for uri, value in sorted(slice_of_nodes):
+    for level, stage in enumerate(manifest.sorted()):
+        for uri, value in sorted(stage, reverse=args.swap):
             print('{}: {} = {!r}'.format(level, uri, value))
