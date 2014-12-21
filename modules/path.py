@@ -3,6 +3,7 @@
 from angler.plugin import Plugin
 
 import os
+import stat
 
 class Path(Plugin):
     schemes = ['path']
@@ -27,3 +28,20 @@ class Path(Plugin):
             self.session.add_node(parent)
             parent.found_node()
             self.session.add_edge(parent, self)
+
+    def get_state(self):
+        try:
+            mode = os.lstat(self.path).st_mode
+        except FileNotFoundError:
+            return 'absent'
+        if stat.S_ISDIR(mode):
+            return 'folder'
+        elif stat.S_ISREG(mode):
+            return 'file'
+        elif stat.S_ISLNK(mode):
+            return 'link'
+        else:
+            return None
+
+    def set_state(self):
+        return

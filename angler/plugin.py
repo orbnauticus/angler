@@ -1,4 +1,6 @@
 
+from abc import abstractmethod, ABCMeta
+
 import logging
 import re
 
@@ -22,7 +24,7 @@ def urijoin(scheme, host, path, query, fragment):
     )
 
 
-class Plugin(object):
+class Plugin(metaclass=ABCMeta):
     def __init__(self, session, scheme, host, path, query, fragment, value):
         self.session = session
         self.scheme = scheme
@@ -53,3 +55,11 @@ class Plugin(object):
 
     def found_outgoing_edge(self, sink):
         pass
+
+    @abstractmethod
+    def get_state(self):
+        return
+
+    @abstractmethod
+    def set_state(self):
+        return
