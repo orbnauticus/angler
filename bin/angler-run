@@ -18,6 +18,4 @@ if __name__ == '__main__':
 
     manifest = Manifest(args.manifest)
 
-    for level, stage in enumerate(manifest.sorted()):
-        for uri, value in sorted(stage, reverse=args.swap):
-            print('{}: {} = {!r}'.format(level, uri, value))
+    manifest.run_once(args.swap)
