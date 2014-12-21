@@ -52,7 +52,6 @@ class Session(object):
             SELECT source, sink FROM edge"""))
 
     def add_node(self, node):
-        assert '://' in node.get_uri(), vars(node)
         self.nodes.add(Node(node.get_uri(), node.value))
 
     def add_edge(self, source, sink):
@@ -81,6 +80,42 @@ def isstrictsubclass(obj, class_):
     return isclass(obj) and obj is not class_ and issubclass(obj, class_)
 
 
+class PluginManager(dict):
+    def __init__(self, session, searchpaths=None):
+        self.session = session
+        self.searchpaths = searchpaths or []
+        self.logger = logging.getLogger('plugin')
+
+    def discover(self):
+        for folder in self.searchpaths:
+            self.logger.debug('Searching {!r} for plugins'.format(
+                os.path.abspath(folder)))
+            sys.path.insert(0, folder)
+            try:
+                for name in os.listdir(folder):
+                    if name.endswith('.py'):
+                        self.update(self.load_module_plugins(name))
+            finally:
+                if sys.path[0] == folder:
+                    del sys.path[0]
+
+    def load_module_plugins(self, module_name):
+        plugins = {}
+        module = import_module(module_name[:-3])
+        for _, value in getmembers(module):
+            if isstrictsubclass(value, Plugin):
+                for scheme in value.schemes:
+                    self.logger.debug('Found handler for {!r} in {}'.format(
+                        scheme, module_name))
+                    plugins[scheme] = value
+        return plugins
+
+    def new_from_node(self, node):
+        scheme = node.uri.partition('://')[0]
+        plugin = self[scheme]
+        return plugin.from_node(self.session, node)
+
+
 class Manifest(object):
     def __init__(self, database):
         self.connection = sqlite3.connect(database)
@@ -96,47 +131,43 @@ class Manifest(object):
             """INSERT INTO edge VALUES (?,?);""", [source, sink])
         self.connection.commit()
 
-    def load_plugins(self):
-        logger = logging.getLogger('plugin')
-        self.plugins = {}
-        for folder in self.module_paths:
-            logger.debug('Searching {!r} for plugins'.format(
-                os.path.abspath(folder)))
-            sys.path.insert(0, folder)
-            try:
-                for name in os.listdir(folder):
-                    if name.endswith('.py'):
-                        self.plugins.update(self.retrieve_plugins(name))
-            finally:
-                del sys.path[0]
-
-    def retrieve_plugins(self, module_name):
-        plugins = {}
-        logger = logging.getLogger('plugin')
-        module = import_module(module_name[:-3])
-        for _, value in getmembers(module):
-            if isstrictsubclass(value, Plugin):
-                for scheme in value.schemes:
-                    logger.debug('Found handler for {!r} in {}'.format(
-                        scheme, module_name))
-                    plugins[scheme] = value
-        return plugins
-
-    def run_once(self, swapped=False):
-        self.load_plugins()
-        logger = logging.getLogger('manifest')
+    def run_once(self, swapped=False, plugin_paths=['modules']):
         session = Session(self)
+        plugins = PluginManager(session, plugin_paths)
+        plugins.discover()
+        self.logger = logging.getLogger('manifest')
         for node in set(session.nodes):
-            scheme = node.uri.partition('://')[0]
             try:
-                plugin = self.plugins[scheme]
+                plugins.new_from_node(node).found_node()
             except KeyError:
-                logger.error('No handler for {!r}'.format(node.uri))
-            else:
-                plugin.from_node(session, node).found_node()
+                self.logger.error('No handler for {!r}'.format(node.uri))
         for level, stage in enumerate(session):
-            for uri, value in sorted(stage, reverse=swapped):
-                logger.debug('[{}]:{} = {!r}'.format(level, uri, value))
+            for node in sorted(stage, reverse=swapped):
+                logger = logging.getLogger('stage[{}]'.format(level))
+                try:
+                    plugin = plugins.new_from_node(node)
+                except KeyError as error:
+                    logger.error("No handler was found for {!r}".format(
+                        error.args[0]))
+                    continue
+                except Exception as error:
+                    logger.exception(
+                        "Error loading plugin for {!r}...".format(node.uri))
+                    continue
+                current_state = plugin.get_state()
+                if current_state == node.value:
+                    logger.debug('Skipping {} with desired state {!r}'.format(
+                        node.uri, current_state))
+                else:
+                    logger.info('Applying {} -> {!r}'.format(
+                        node.uri, node.value))
+                    try:
+                        plugin.set_state()
+                    except Exception as error:
+                        logger.exception(
+                            "Error setting state {!r} on {}".format(
+                                node.value, node.uri))
+
 
 
 default_manifest = 'angler.manifest'
