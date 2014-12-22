@@ -13,9 +13,12 @@ if __name__ == '__main__':
                         help='Reverse order of nodes in each stage.'
                              ' Useful for checking if there are any missing'
                              ' relationships')
+    parser.add_argument('--dryrun', '-n', action='store_true',
+                        help='List what actions would be taken without making'
+                             ' any changes')
 
     args = parser.parse_args()
 
     manifest = Manifest(args.manifest)
 
-    manifest.run_once(args.swap)
+    manifest.run_once(args.swap, dryrun=args.dryrun)

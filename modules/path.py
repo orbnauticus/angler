@@ -13,7 +13,6 @@ class Path(Plugin):
         if path == '/':
             return None
         return Path(
-            session=self.session,
             scheme=self.scheme,
             host=self.host,
             path=path,
@@ -22,12 +21,18 @@ class Path(Plugin):
             value='folder',
         )
 
-    def found_node(self):
-        parent = self.get_parent()
-        if parent:
-            self.session.add_node(parent)
-            parent.found_node()
-            self.session.add_edge(parent, self)
+    def found_node(self, session):
+        if self.query:
+            base = self.copy(query='', value=None)
+            session.add_node(base)
+            base.found_node(session)
+            session.add_edge(base, self)
+        else:
+            parent = self.get_parent()
+            if parent:
+                session.add_node(parent)
+                parent.found_node(session)
+                session.add_edge(parent, self)
 
     def get_state(self):
         try:
@@ -43,5 +48,8 @@ class Path(Plugin):
         else:
             return None
 
-    def set_state(self):
-        return
+    def set_state(self, current_state):
+        if current_state != 'absent':
+            if self.value == 'folder':
+                os.mkdir(self.path)
+

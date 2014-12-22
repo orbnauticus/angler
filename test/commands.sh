@@ -12,6 +12,6 @@ debug angler-add path:///home/user/bin/script?permission 0755
 debug angler-add process:///run-script "bash bin/script"
 debug angler-add path:///home/user/.bashrc file --before process:///run-script
 debug angler-order package:///bash exec:///run-script
-debug angler-run
-debug angler-run --swap
+debug angler-run -n
+debug angler-run -n --swap
 rm angler.manifest

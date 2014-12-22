@@ -4,6 +4,7 @@ from collections import namedtuple
 from inspect import getmembers, isclass
 from importlib import import_module
 
+import json
 import logging
 import os
 import sqlite3
@@ -41,7 +42,12 @@ class CycleError(Exception):
 
 Edge = namedtuple('Edge', 'source sink')
 
-Node = namedtuple('Node', 'uri value')
+class Node(namedtuple('Node', 'uri value')):
+    def __hash__(self):
+        return hash(self.uri)
+
+    def __repr__(self):
+        return 'Node({!r}, {!r})'.format(*self)
 
 
 class Session(object):
@@ -50,9 +56,28 @@ class Session(object):
             SELECT uri, value FROM node"""))
         self.edges = set(Edge(*row) for row in manifest.connection.execute("""
             SELECT source, sink FROM edge"""))
+        self.logger = logging.getLogger('session')
 
     def add_node(self, node):
-        self.nodes.add(Node(node.get_uri(), node.value))
+        uri = node.get_uri()
+        self.logger.debug('Found automatic node {} = {!r}'.format(
+            uri, node.value))
+        new_node = Node(uri, node.value)
+        conflicts = set(node for node in self.nodes
+                        if node.uri == new_node.uri)
+        if conflicts:
+            if new_node.value is None:
+                return
+            conflict_node = conflicts.pop()
+            assert len(conflicts) == 0
+            if conflict_node.value is None:
+                self.nodes.add(new_node)
+            elif conflict_node.value == new_node.value:
+                return
+            else:
+                raise ValueError((uri, conflict_node.value, new_node.value))
+        else:
+            self.nodes.add(new_node)
 
     def add_edge(self, source, sink):
         self.edges.add(Edge(source.get_uri(), sink.get_uri()))
@@ -81,8 +106,7 @@ def isstrictsubclass(obj, class_):
 
 
 class PluginManager(dict):
-    def __init__(self, session, searchpaths=None):
-        self.session = session
+    def __init__(self, searchpaths=None):
         self.searchpaths = searchpaths or []
         self.logger = logging.getLogger('plugin')
 
@@ -94,26 +118,26 @@ class PluginManager(dict):
             try:
                 for name in os.listdir(folder):
                     if name.endswith('.py'):
-                        self.update(self.load_module_plugins(name))
+                        self.update(self.load_module_plugins(folder, name))
             finally:
                 if sys.path[0] == folder:
                     del sys.path[0]
 
-    def load_module_plugins(self, module_name):
+    def load_module_plugins(self, folder, module_name):
         plugins = {}
         module = import_module(module_name[:-3])
         for _, value in getmembers(module):
             if isstrictsubclass(value, Plugin):
                 for scheme in value.schemes:
                     self.logger.debug('Found handler for {!r} in {}'.format(
-                        scheme, module_name))
+                        scheme, os.path.join(folder, module_name)))
                     plugins[scheme] = value
         return plugins
 
     def new_from_node(self, node):
         scheme = node.uri.partition('://')[0]
         plugin = self[scheme]
-        return plugin.from_node(self.session, node)
+        return plugin.from_node(node)
 
 
 class Manifest(object):
@@ -131,14 +155,15 @@ class Manifest(object):
             """INSERT INTO edge VALUES (?,?);""", [source, sink])
         self.connection.commit()
 
-    def run_once(self, swapped=False, plugin_paths=['modules']):
+    def run_once(self, swapped=False, plugin_paths=['modules'], dryrun=False,
+                 verify=False):
         session = Session(self)
-        plugins = PluginManager(session, plugin_paths)
+        plugins = PluginManager(plugin_paths)
         plugins.discover()
         self.logger = logging.getLogger('manifest')
         for node in set(session.nodes):
             try:
-                plugins.new_from_node(node).found_node()
+                plugins.new_from_node(node).found_node(session)
             except KeyError:
                 self.logger.error('No handler for {!r}'.format(node.uri))
         for level, stage in enumerate(session):
@@ -158,15 +183,18 @@ class Manifest(object):
                 if current_state == node.value:
                     logger.debug('Skipping {} with desired state {!r}'.format(
                         node.uri, current_state))
-                else:
+                elif not dryrun:
                     logger.info('Applying {} -> {!r}'.format(
                         node.uri, node.value))
                     try:
-                        plugin.set_state()
+                        plugin.set_state(current_state)
                     except Exception as error:
                         logger.exception(
                             "Error setting state {!r} on {}".format(
                                 node.value, node.uri))
+                else:
+                    logger.info('Would apply {} -> {!r}'.format(
+                        node.uri, node.value))
 
 
 
