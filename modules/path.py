@@ -35,6 +35,16 @@ class Path(Plugin):
                 session.add_edge(parent, self)
 
     def get_state(self):
+        if not self.query:
+            return self.get_node_state()
+        elif self.query == 'permission':
+            return self.get_permission_state()
+        elif self.query == 'ownership':
+            return self.get_ownership_state()
+        else:
+            raise ValueError("Unknown property {!r}".format(self.query))
+
+    def get_node_state(self):
         try:
             mode = os.lstat(self.path).st_mode
         except FileNotFoundError:
@@ -48,8 +58,34 @@ class Path(Plugin):
         else:
             return None
 
-    def set_state(self, current_state):
-        if current_state != 'absent':
-            if self.value == 'folder':
-                os.mkdir(self.path)
+    def get_permission_state(self):
+        try:
+            result = os.lstat(self.path)
+        except FileNotFoundError:
+            umask = os.umask(0)
+            os.umask(umask)
+            return '%o' % (0o777 & ~umask)
+        return '%o' % (stat.S_IMODE(result.st_mode))
 
+    def set_state(self, current_state):
+        if not self.query:
+            self.set_node_state(current_state)
+        elif self.query == 'permission':
+            self.set_permission_state(current_state)
+        elif self.query == 'ownership':
+            self.set_ownership_state(current_state)
+        else:
+            raise ValueError("Unknown property {!r}".format(self.query))
+
+    def set_node_state(self, current_state):
+        if current_state != 'absent':
+            if current_state == 'folder':
+                shutil.rmtree(self.path)
+            else:
+                os.remove(self.path)
+        if self.value == 'folder':
+            os.mkdir(self.path)
+        elif self.value == 'file':
+            open(self.path,'w').close()
+        elif self.value == 'link':
+            pass
