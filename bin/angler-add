@@ -31,7 +31,6 @@ if __name__ == '__main__':
 
     if args.properties:
         args.status[key].update(dict(args.properties))
-        print(args.status[key])
 
     manifest = Manifest(args.manifest)
 
