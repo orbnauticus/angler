@@ -12,7 +12,7 @@ if __name__ == '__main__':
     parser.add_argument('uri', type=uri)
     parser.add_argument('status', nargs='?')
     parser.add_argument('properties', metavar='property=value', type=key_value,
-                        nargs='*', action='append')
+                        nargs='*')
 
     parser.add_argument('-m', '--manifest', default=default_manifest)
     parser.add_argument('-b', '--before', action='append', default=[])
@@ -23,9 +23,15 @@ if __name__ == '__main__':
     try:
         first = key_value(args.status)
     except ValueError:
-        pass
+        args.status = {args.status: {}}
     else:
         args.status = {'': {first[0]: first[1]}}
+
+    key = list(args.status.keys())[0]
+
+    if args.properties:
+        args.status[key].update(dict(args.properties))
+        print(args.status[key])
 
     manifest = Manifest(args.manifest)
 
