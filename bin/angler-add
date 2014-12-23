@@ -1,43 +1,11 @@
 #!/usr/bin/env python3
 
-from angler.core import Manifest, default_manifest
-from angler.util import json_or_string, uri, key_value
+from angler.command import Add
 
 
 if __name__ == '__main__':
     import argparse
 
-    parser = argparse.ArgumentParser()
+    add = Add.from_arguments()
 
-    parser.add_argument('uri', type=uri)
-    parser.add_argument('status', nargs='?')
-    parser.add_argument('properties', metavar='property=value', type=key_value,
-                        nargs='*')
-
-    parser.add_argument('-m', '--manifest', default=default_manifest)
-    parser.add_argument('-b', '--before', action='append', default=[])
-    parser.add_argument('-a', '--after', action='append', default=[])
-
-    args = parser.parse_args()
-
-    try:
-        first = key_value(args.status)
-    except ValueError:
-        args.status = {args.status: {}}
-    else:
-        args.status = {'': {first[0]: first[1]}}
-
-    key = list(args.status.keys())[0]
-
-    if args.properties:
-        args.status[key].update(dict(args.properties))
-
-    manifest = Manifest(args.manifest)
-
-    manifest.insert_node(args.uri, args.status)
-
-    for node in args.before:
-        manifest.insert_edge(args.uri, node)
-
-    for node in args.after:
-        manifest.insert_edge(node, args.uri)
+    add.run()

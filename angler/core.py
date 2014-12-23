@@ -148,6 +148,7 @@ class PluginManager(dict):
 
 class Manifest(object):
     def __init__(self, database):
+        self.database = database
         self.connection = sqlite3.connect(database)
         self.module_paths = ['modules']
 
