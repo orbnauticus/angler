@@ -62,8 +62,6 @@ class Session(object):
 
     def add_node(self, node):
         uri = node.get_uri()
-        self.logger.debug('Found automatic node {} = {!r}'.format(
-            uri, node.value))
         new_node = Node(uri, node.value)
         conflicts = set(node for node in self.nodes
                         if node.uri == new_node.uri)
@@ -79,6 +77,8 @@ class Session(object):
             else:
                 raise ValueError((uri, conflict_node.value, new_node.value))
         else:
+            self.logger.debug('Found automatic node {} = {!r}'.format(
+                uri, node.value))
             self.nodes.add(new_node)
 
     def add_edge(self, source, sink):
