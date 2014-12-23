@@ -30,5 +30,4 @@ def urijoin(scheme, host, path, query, fragment):
     )
 
 def uri(value):
-    urisplit(value)
-    return value
+    return urijoin(*urisplit(value))
