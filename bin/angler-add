@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from angler.core import Manifest, default_manifest
-from angler.util import json_or_string, uri
+from angler.util import json_or_string, uri, key_value
 
 
 if __name__ == '__main__':
@@ -10,17 +10,26 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('uri', type=uri)
-    parser.add_argument('value', type=json_or_string)
+    parser.add_argument('status', nargs='?')
+    parser.add_argument('properties', metavar='property=value', type=key_value,
+                        nargs='*', action='append')
 
-    parser.add_argument('--manifest', '-m', default=default_manifest)
-    parser.add_argument('--before', '-b', action='append', default=[])
-    parser.add_argument('--after', '-a', action='append', default=[])
+    parser.add_argument('-m', '--manifest', default=default_manifest)
+    parser.add_argument('-b', '--before', action='append', default=[])
+    parser.add_argument('-a', '--after', action='append', default=[])
 
     args = parser.parse_args()
 
+    try:
+        first = key_value(args.status)
+    except ValueError:
+        pass
+    else:
+        args.status = {'': {first[0]: first[1]}}
+
     manifest = Manifest(args.manifest)
 
-    manifest.insert_node(args.uri, args.value)
+    manifest.insert_node(args.uri, args.status)
 
     for node in args.before:
         manifest.insert_edge(args.uri, node)
