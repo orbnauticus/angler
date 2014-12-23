@@ -1,27 +1,9 @@
 
+from .util import urisplit, urijoin
+
 from abc import abstractmethod, ABCMeta
 
 import logging
-import re
-
-def urisplit(uri):
-    pattern = "^([a-zA-Z+_-]+)://([^/]*)(/[^?#]*)(?:\?([^#]*))?(?:#(.*))?$"
-    match = re.match(pattern, uri)
-    if match is None:
-        raise ValueError("Unable to parse uri {!r}".format(uri))
-    return match.groups()
-
-
-def urijoin(scheme, host, path, query, fragment):
-    if not path.startswith('/'):
-        raise ValueError("Invalid 'path': {!r}".format(path))
-    return '{scheme}://{host}{path}{query}{fragment}'.format(
-        scheme=scheme,
-        host=host,
-        path=path,
-        query=(query or '') and '?' + query,
-        fragment=(fragment or '') and '?' + fragment
-    )
 
 
 class Plugin(metaclass=ABCMeta):

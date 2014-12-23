@@ -5,6 +5,7 @@ from angler.plugin import Plugin
 import os
 import stat
 
+
 class Path(Plugin):
     schemes = ['path']
 
@@ -18,7 +19,7 @@ class Path(Plugin):
             path=path,
             query='',
             fragment='',
-            value='folder',
+            value={"folder": {}},
         )
 
     def found_node(self, session):
@@ -86,6 +87,6 @@ class Path(Plugin):
         if self.value == 'folder':
             os.mkdir(self.path)
         elif self.value == 'file':
-            open(self.path,'w').close()
+            open(self.path, 'w').close()
         elif self.value == 'link':
             pass

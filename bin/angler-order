@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from angler.core import Manifest, default_manifest
+from angler.util import uri
 
 from itertools import tee
 
@@ -10,7 +11,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('uri', nargs='+')
+    parser.add_argument('uri', nargs='+', type=uri)
 
     parser.add_argument('--manifest', '-m', default=default_manifest)
 

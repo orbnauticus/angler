@@ -42,6 +42,7 @@ class CycleError(Exception):
 
 Edge = namedtuple('Edge', 'source sink')
 
+
 class Node(namedtuple('Node', 'uri value')):
     def __hash__(self):
         return hash(self.uri)
@@ -52,8 +53,9 @@ class Node(namedtuple('Node', 'uri value')):
 
 class Session(object):
     def __init__(self, manifest):
-        self.nodes = set(Node(*row) for row in manifest.connection.execute("""
-            SELECT uri, value FROM node"""))
+        self.nodes = set(
+            Node(uri, json.loads(value)) for uri, value in
+            manifest.connection.execute("""SELECT uri, value FROM node"""))
         self.edges = set(Edge(*row) for row in manifest.connection.execute("""
             SELECT source, sink FROM edge"""))
         self.logger = logging.getLogger('session')
@@ -80,7 +82,11 @@ class Session(object):
             self.nodes.add(new_node)
 
     def add_edge(self, source, sink):
-        self.edges.add(Edge(source.get_uri(), sink.get_uri()))
+        source_uri = source.get_uri()
+        sink_uri = sink.get_uri()
+        self.logger.debug('Found automatic edge {} -> {}'.format(
+            source_uri, sink_uri))
+        self.edges.add(Edge(source_uri, sink_uri))
 
     def __iter__(self):
         return self
@@ -147,7 +153,7 @@ class Manifest(object):
 
     def insert_node(self, uri, value):
         self.connection.execute(
-            """INSERT INTO node VALUES (?,?);""", [uri, value])
+            """INSERT INTO node VALUES (?,?);""", [uri, json.dumps(value)])
         self.connection.commit()
 
     def insert_edge(self, source, sink):
@@ -195,7 +201,6 @@ class Manifest(object):
                 else:
                     logger.info('Would apply {} -> {!r}'.format(
                         node.uri, node.value))
-
 
 
 default_manifest = 'angler.manifest'

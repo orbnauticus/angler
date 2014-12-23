@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from angler.core import Manifest, default_manifest
+from angler.util import json_or_string, uri
 
 
 if __name__ == '__main__':
@@ -8,8 +9,8 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('uri')
-    parser.add_argument('value')
+    parser.add_argument('uri', type=uri)
+    parser.add_argument('value', type=json_or_string)
 
     parser.add_argument('--manifest', '-m', default=default_manifest)
     parser.add_argument('--before', '-b', action='append', default=[])
@@ -26,4 +27,3 @@ if __name__ == '__main__':
 
     for node in args.after:
         manifest.insert_edge(node, args.uri)
-
