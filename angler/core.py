@@ -146,7 +146,8 @@ class Manifest(object):
     def __init__(self, database):
         self.database = database
         self.connection = sqlite3.connect(database)
-        self.module_paths = ['modules']
+        self.plugins = PluginManager(searchpaths=['modules'])
+        self.plugins.discover()
 
     def insert_node(self, uri, value):
         self.connection.execute(
@@ -158,22 +159,19 @@ class Manifest(object):
             """INSERT INTO edge VALUES (?,?);""", [source, sink])
         self.connection.commit()
 
-    def run_once(self, swapped=False, plugin_paths=['modules'], dryrun=False,
-                 verify=False):
+    def run_once(self, swapped=False, dryrun=False, verify=False):
         session = Session(self)
-        plugins = PluginManager(plugin_paths)
-        plugins.discover()
         self.logger = logging.getLogger('manifest')
         for node in set(session.nodes):
             try:
-                plugins.new_from_node(node).found_node(session)
+                self.plugins.new_from_node(node).found_node(session)
             except KeyError:
                 self.logger.error('No handler for {!r}'.format(node.uri))
         for level, stage in enumerate(session):
             for node in sorted(stage, reverse=swapped):
                 logger = logging.getLogger('stage[{}]'.format(level))
                 try:
-                    plugin = plugins.new_from_node(node)
+                    plugin = self.plugins.new_from_node(node)
                 except KeyError as error:
                     logger.error("No handler was found for {!r}".format(
                         error.args[0]))
