@@ -3,7 +3,7 @@ from angler.core import Manifest, default_manifest
 from angler.util import uri, key_value
 
 import argparse
-
+from inspect import cleandoc
 
 class Add(object):
     def __init__(self, manifest, uri, status, before, after):
@@ -15,10 +15,11 @@ class Add(object):
 
     @classmethod
     def help(self):
-        return """add uri [status] [property=value [property=value ...]]
+        return cleandoc("""
+        add uri [status] [property=value [property=value ...]]
 
         Add a node at uri to the manifest.
-        """
+        """)
 
     @classmethod
     def from_arguments(cls, manifest=None, argv=None, exit=True):
