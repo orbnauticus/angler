@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 
-from angler.core import Manifest, default_manifest
+from angler.core import Manifest, default_manifest, Session, setup
 from angler.command import Add
 from angler.util import uri, key_value
 
 import argparse
 import cmd
+import os
 import shlex
 
 
@@ -21,6 +22,7 @@ class AnglerShell(cmd.Cmd):
         super(AnglerShell, self).__init__()
         self.settings = dict()
         self.manifest = manifest
+        self.session = Session(manifest)
         self.settings['manifest'] = manifest.database
         self.settings['curdir'] = ''
         self.prompt = '{manifest}#{curdir}⟫'
@@ -89,6 +91,9 @@ if __name__ == '__main__':
     parser.add_argument('-n', '--dryrun', action='store_true')
 
     args = parser.parse_args()
+
+    if not os.path.exists(args.manifest):
+        setup(args.manifest)
 
     manifest = Manifest(args.manifest)
 
