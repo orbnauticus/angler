@@ -15,11 +15,14 @@ class AnglerShell(cmd.Cmd):
         self.manifest = manifest
         self.prompt = 'angler:{}⟫ '.format(manifest.database)
 
-    def do_exit(self, arg):
-        return True
+    def default(self, line):
+        if line == 'EOF':
+            print('exit')
+            return True
+        else:
+            return super(AnglerShell, self).default(line)
 
-    def do_EOF(self, arg):
-        print('exit')
+    def do_exit(self, arg):
         return True
 
     def do_add(self, arg):
