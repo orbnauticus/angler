@@ -14,6 +14,13 @@ class Add(object):
         self.after = after
 
     @classmethod
+    def help(self):
+        return """add uri [status] [property=value [property=value ...]]
+
+        Add a node at uri to the manifest.
+        """
+
+    @classmethod
     def from_arguments(cls, manifest=None, argv=None, exit=True):
         parser = argparse.ArgumentParser()
 

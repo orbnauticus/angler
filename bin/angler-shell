@@ -28,10 +28,13 @@ class AnglerShell(cmd.Cmd):
         except SystemExit:
             return
 
-        print('Would add node', args.uri, args.status)
+        print('Would add node', add.uri, add.status)
 
         if False:
             add.run()
+
+    def help_add(self):
+        print(Add.help())
 
 
 if __name__ == '__main__':
