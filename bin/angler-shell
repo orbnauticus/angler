@@ -26,14 +26,40 @@ class AnglerShell(cmd.Cmd):
         self.settings['manifest'] = manifest.database
         self.settings['curdir'] = ''
         self.prompt = '{manifest}#{curdir}⟫'
+        self.settings['prompt2'] = '>'
+        self.multiline = ''
 
     @property
     def prompt(self):
-        return self.settings['prompt'].format(**self.settings) + ' '
+        if self.multiline:
+            return self.settings['prompt2'] + ' '
+        else:
+            return self.settings['prompt'].format(**self.settings) + ' '
 
     @prompt.setter
     def prompt(self, new):
         self.settings['prompt'] = new
+
+    def emptyline(self):
+        pass
+
+    def parseline(self, line):
+        if self.multiline:
+            line = '{}\n{}'.format(self.multiline, line)
+        self.multiline = ''
+        try:
+            words = shlex.split(line)
+        except ValueError as error:
+            if error.args == ('No closing quotation',):
+                self.multiline = line
+                return None, None, ''
+            elif error.args == ('No escaped character',):
+                self.multiline = line[:-1]
+                return None, None, ''
+        if not words:
+            return None, None, ''
+        cmd, arg = words[0], words[1:]
+        return cmd, arg, line
 
     def default(self, line):
         if line == 'EOF':
@@ -42,12 +68,12 @@ class AnglerShell(cmd.Cmd):
         else:
             return super(AnglerShell, self).default(line)
 
-    def do_exit(self, arg):
+    def do_exit(self, args):
         return True
 
-    def do_add(self, arg):
+    def do_add(self, args):
         try:
-            add = Add.from_arguments(self.manifest, shlex.split(arg))
+            add = Add.from_arguments(self.manifest, args)
         except SystemExit:
             return
 
@@ -56,8 +82,11 @@ class AnglerShell(cmd.Cmd):
         else:
             add.run()
 
-    def do_var(self, arg):
-        if not arg:
+    def do_stub(self, args):
+        print(args)
+
+    def do_var(self, args):
+        if not args:
             for key in sorted(self.settings):
                 print('{}={!r}'.format(key, self.settings[key]))
             return
@@ -68,11 +97,11 @@ class AnglerShell(cmd.Cmd):
             key = arg.strip()
             print('{}={!r}'.format(key, self.settings[key]))
 
-    def do_cd(self, arg):
-        self.settings['curdir'] = single_arg(arg)
+    def do_cd(self, args):
+        self.settings['curdir'] = args[0]
 
-    def do_ls(self, arg):
-        arg = arg or self.settings['curdir']
+    def do_ls(self, args):
+        arg = (args[:0] or [self.settings['curdir']])[0]
         if not arg:
             for scheme in self.manifest.plugins:
                 print('{}://'.format(scheme))
