@@ -14,6 +14,7 @@ class AnglerShell(cmd.Cmd):
         super(AnglerShell, self).__init__()
         self.manifest = manifest
         self.prompt = 'angler:{}⟫ '.format(manifest.database)
+        self.settings = dict()
 
     def default(self, line):
         if line == 'EOF':
@@ -31,10 +32,25 @@ class AnglerShell(cmd.Cmd):
         except SystemExit:
             return
 
-        print('Would add node', add.uri, add.status)
-
-        if False:
+        if self.settings['dryrun']:
+            print('Would add node', add.uri, add.status)
+        else:
             add.run()
+
+    def do_var(self, arg):
+        if not arg:
+            for key in sorted(self.settings):
+                print('{}={!r}'.format(key, self.settings[key]))
+            return
+        key, successful, value = arg.partition('=')
+        if successful:
+            values = shlex.split(value)
+            if len(values) > 1:
+                raise ValueError("Unexpected arguments: {}".format(values[1:]))
+            self.settings[key.strip()] = values[0]
+        else:
+            key = arg.strip()
+            print('{}={!r}'.format(key, self.settings[key]))
 
     def help_add(self):
         print(Add.help())
@@ -45,13 +61,16 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('manifest', nargs='?', default=default_manifest)
+    parser.add_argument('-n', '--dryrun', action='store_true')
 
     args = parser.parse_args()
 
     manifest = Manifest(args.manifest)
 
     try:
-        AnglerShell(manifest).cmdloop()
+        shell = AnglerShell(manifest)
+        shell.settings['dryrun'] = args.dryrun
+        shell.cmdloop()
     except KeyboardInterrupt:
         print()
         exit(0)
