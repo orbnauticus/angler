@@ -30,10 +30,6 @@ def setup(database):
           sink NOT NULL REFERENCES node,
           PRIMARY KEY(source, sink) ON CONFLICT REPLACE);
         """)
-    for name in os.listdir('modules'):
-        if name.endswith('.sql'):
-            connection.executescript(
-                open(os.path.join('modules', name)).read())
 
 
 class CycleError(Exception):
