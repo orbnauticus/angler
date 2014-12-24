@@ -12,9 +12,18 @@ import shlex
 class AnglerShell(cmd.Cmd):
     def __init__(self, manifest):
         super(AnglerShell, self).__init__()
-        self.manifest = manifest
-        self.prompt = 'angler:{}⟫ '.format(manifest.database)
         self.settings = dict()
+        self.manifest = manifest
+        self.settings['manifest'] = manifest.database
+        self.prompt = '{manifest}⟫'
+
+    @property
+    def prompt(self):
+        return self.settings['prompt'].format(**self.settings) + ' '
+
+    @prompt.setter
+    def prompt(self, new):
+        self.settings['prompt'] = new
 
     def default(self, line):
         if line == 'EOF':
