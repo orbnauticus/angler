@@ -141,7 +141,10 @@ class PluginManager(dict):
 
     def definition_from_node(self, node):
         scheme = node.uri.partition('://')[0]
-        plugin = self[scheme]
+        try:
+            plugin = self[scheme]
+        except KeyError:
+            return None
         return plugin.from_node(node)
 
 
@@ -168,38 +171,43 @@ class Manifest(object):
         self.logger = logging.getLogger('manifest')
         for node in set(session.nodes):
             try:
-                self.plugins.definition_from_node(node).found_node(session)
+                definition = self.plugins.definition_from_node(node)
             except KeyError:
                 self.logger.error('No handler for {!r}'.format(node.uri))
+            definition.found_node(session)
         for level, stage in enumerate(session):
+            logger = logging.getLogger('stage[{}]'.format(level))
             for node in sorted(stage, reverse=swapped):
-                logger = logging.getLogger('stage[{}]'.format(level))
                 try:
                     definition = self.plugins.definition_from_node(node)
-                except KeyError as error:
-                    logger.error("No handler was found for {!r}".format(
-                        error.args[0]))
-                    continue
                 except Exception as error:
                     logger.exception(
                         "Error loading plugin for {!r}...".format(node.uri))
-                    continue
-                current_state = definition.get_state()
-                if current_state == node.value:
-                    logger.debug('Skipping {} with desired state {!r}'.format(
-                        node.uri, current_state))
-                elif not dryrun:
-                    logger.info('Applying {} -> {!r}'.format(
-                        node.uri, node.value))
-                    try:
-                        definition.set_state(current_state)
-                    except Exception as error:
-                        logger.exception(
-                            "Error setting state {!r} on {}".format(
-                                node.value, node.uri))
+                if definition is None:
+                    logger.error("No handler was found for {!r}".format(
+                        error.args[0]))
                 else:
-                    logger.info('Would apply {} -> {!r}'.format(
-                        node.uri, node.value))
+                    definition.apply()
+                    self.apply_definition(definition, dryrun=dryrun,
+                                          verify=verify)
+
+    def apply_definition(self, definition, dryrun=False, verify=False):
+        current_state = definition.get_state()
+        if current_state == node.value:
+            logger.debug('Skipping {} with desired state {!r}'.format(
+                node.uri, current_state))
+        elif not dryrun:
+            logger.info('Applying {} -> {!r}'.format(
+                node.uri, node.value))
+            try:
+                definition.set_state(current_state)
+            except Exception as error:
+                logger.exception(
+                    "Error setting state {!r} on {}".format(
+                        node.value, node.uri))
+        else:
+            logger.info('Would apply {} -> {!r}'.format(
+                node.uri, node.value))
 
 
 default_manifest = 'angler.manifest'
