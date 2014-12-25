@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 
-from angler.plugin import Plugin
+from angler.plugin import Definition
 
 import os
 import stat
 
 
-class Path(Plugin):
+class Path(Definition):
     schemes = ['path']
 
     def get_parent(self):

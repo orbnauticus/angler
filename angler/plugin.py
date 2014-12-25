@@ -6,7 +6,7 @@ from abc import abstractmethod, ABCMeta
 import logging
 
 
-class Plugin(metaclass=ABCMeta):
+class Definition(metaclass=ABCMeta):
     def __init__(self, scheme, host, path, query, fragment, value):
         self.scheme = scheme
         self.host = host

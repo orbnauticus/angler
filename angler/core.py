@@ -17,7 +17,7 @@ except ImportError:
 else:
     logging.basicConfig(handlers=handlers(), level=logging.DEBUG)
 
-from .plugin import Plugin
+from .plugin import Definition
 
 
 def setup(database):
@@ -132,14 +132,14 @@ class PluginManager(dict):
         plugins = {}
         module = import_module(module_name[:-3])
         for _, value in getmembers(module):
-            if isstrictsubclass(value, Plugin):
+            if isstrictsubclass(value, Definition):
                 for scheme in value.schemes:
                     self.logger.debug('Found handler for {!r} in {}'.format(
                         scheme, os.path.join(folder, module_name)))
                     plugins[scheme] = value
         return plugins
 
-    def new_from_node(self, node):
+    def definition_from_node(self, node):
         scheme = node.uri.partition('://')[0]
         plugin = self[scheme]
         return plugin.from_node(node)
@@ -168,14 +168,14 @@ class Manifest(object):
         self.logger = logging.getLogger('manifest')
         for node in set(session.nodes):
             try:
-                self.plugins.new_from_node(node).found_node(session)
+                self.plugins.definition_from_node(node).found_node(session)
             except KeyError:
                 self.logger.error('No handler for {!r}'.format(node.uri))
         for level, stage in enumerate(session):
             for node in sorted(stage, reverse=swapped):
                 logger = logging.getLogger('stage[{}]'.format(level))
                 try:
-                    plugin = self.plugins.new_from_node(node)
+                    definition = self.plugins.definition_from_node(node)
                 except KeyError as error:
                     logger.error("No handler was found for {!r}".format(
                         error.args[0]))
@@ -184,7 +184,7 @@ class Manifest(object):
                     logger.exception(
                         "Error loading plugin for {!r}...".format(node.uri))
                     continue
-                current_state = plugin.get_state()
+                current_state = definition.get_state()
                 if current_state == node.value:
                     logger.debug('Skipping {} with desired state {!r}'.format(
                         node.uri, current_state))
@@ -192,7 +192,7 @@ class Manifest(object):
                     logger.info('Applying {} -> {!r}'.format(
                         node.uri, node.value))
                     try:
-                        plugin.set_state(current_state)
+                        definition.set_state(current_state)
                     except Exception as error:
                         logger.exception(
                             "Error setting state {!r} on {}".format(
