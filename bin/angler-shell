@@ -76,11 +76,7 @@ class AnglerShell(cmd.Cmd):
             add = Add.from_arguments(self.manifest, args)
         except SystemExit:
             return
-
-        if self.settings['dryrun']:
-            print('Would add node', add.uri, add.status)
-        else:
-            add.run()
+        add.run()
 
     def do_stub(self, args):
         print(args)

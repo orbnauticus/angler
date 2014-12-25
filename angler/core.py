@@ -13,17 +13,20 @@ import sys
 try:
     from logcolors.logging import handlers
 except ImportError:
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
 else:
     logging.basicConfig(handlers=handlers(), level=logging.DEBUG)
 
-from .plugin import Plugin
+from .plugin import Definition
 
 
 def setup(database):
     connection = sqlite3.connect(database)
     connection.executescript("""
-        CREATE TABLE node(uri TEXT PRIMARY KEY, value TEXT);
+        CREATE TABLE node(
+            uri TEXT PRIMARY KEY,
+            value TEXT,
+            automatic INT DEFAULT 0);
 
         CREATE TABLE edge(
           source NOT NULL REFERENCES node,
@@ -129,16 +132,19 @@ class PluginManager(dict):
         plugins = {}
         module = import_module(module_name[:-3])
         for _, value in getmembers(module):
-            if isstrictsubclass(value, Plugin):
+            if isstrictsubclass(value, Definition):
                 for scheme in value.schemes:
                     self.logger.debug('Found handler for {!r} in {}'.format(
                         scheme, os.path.join(folder, module_name)))
                     plugins[scheme] = value
         return plugins
 
-    def new_from_node(self, node):
+    def definition_from_node(self, node):
         scheme = node.uri.partition('://')[0]
-        plugin = self[scheme]
+        try:
+            plugin = self[scheme]
+        except KeyError:
+            return None
         return plugin.from_node(node)
 
 
@@ -151,12 +157,13 @@ class Manifest(object):
 
     def insert_node(self, uri, value):
         self.connection.execute(
-            """INSERT INTO node VALUES (?,?);""", [uri, json.dumps(value)])
+            """INSERT INTO node(uri,value) VALUES (?,?);""",
+            [uri, json.dumps(value)])
         self.connection.commit()
 
     def insert_edge(self, source, sink):
         self.connection.execute(
-            """INSERT INTO edge VALUES (?,?);""", [source, sink])
+            """INSERT INTO edge(source,sink) VALUES (?,?);""", [source, sink])
         self.connection.commit()
 
     def run_once(self, swapped=False, dryrun=False, verify=False):
@@ -164,38 +171,43 @@ class Manifest(object):
         self.logger = logging.getLogger('manifest')
         for node in set(session.nodes):
             try:
-                self.plugins.new_from_node(node).found_node(session)
+                definition = self.plugins.definition_from_node(node)
             except KeyError:
                 self.logger.error('No handler for {!r}'.format(node.uri))
+            definition.found_node(session)
         for level, stage in enumerate(session):
+            logger = logging.getLogger('stage[{}]'.format(level))
             for node in sorted(stage, reverse=swapped):
-                logger = logging.getLogger('stage[{}]'.format(level))
                 try:
-                    plugin = self.plugins.new_from_node(node)
-                except KeyError as error:
-                    logger.error("No handler was found for {!r}".format(
-                        error.args[0]))
-                    continue
+                    definition = self.plugins.definition_from_node(node)
                 except Exception as error:
                     logger.exception(
                         "Error loading plugin for {!r}...".format(node.uri))
-                    continue
-                current_state = plugin.get_state()
-                if current_state == node.value:
-                    logger.debug('Skipping {} with desired state {!r}'.format(
-                        node.uri, current_state))
-                elif not dryrun:
-                    logger.info('Applying {} -> {!r}'.format(
-                        node.uri, node.value))
-                    try:
-                        plugin.set_state(current_state)
-                    except Exception as error:
-                        logger.exception(
-                            "Error setting state {!r} on {}".format(
-                                node.value, node.uri))
+                if definition is None:
+                    logger.error("No handler was found for {!r}".format(
+                        error.args[0]))
                 else:
-                    logger.info('Would apply {} -> {!r}'.format(
-                        node.uri, node.value))
+                    definition.apply()
+                    self.apply_definition(definition, dryrun=dryrun,
+                                          verify=verify)
+
+    def apply_definition(self, definition, dryrun=False, verify=False):
+        current_state = definition.get_state()
+        if current_state == node.value:
+            logger.debug('Skipping {} with desired state {!r}'.format(
+                node.uri, current_state))
+        elif not dryrun:
+            logger.info('Applying {} -> {!r}'.format(
+                node.uri, node.value))
+            try:
+                definition.set_state(current_state)
+            except Exception as error:
+                logger.exception(
+                    "Error setting state {!r} on {}".format(
+                        node.value, node.uri))
+        else:
+            logger.info('Would apply {} -> {!r}'.format(
+                node.uri, node.value))
 
 
 default_manifest = 'angler.manifest'
