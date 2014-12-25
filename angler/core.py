@@ -13,7 +13,7 @@ import sys
 try:
     from logcolors.logging import handlers
 except ImportError:
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
 else:
     logging.basicConfig(handlers=handlers(), level=logging.DEBUG)
 
@@ -23,7 +23,10 @@ from .plugin import Plugin
 def setup(database):
     connection = sqlite3.connect(database)
     connection.executescript("""
-        CREATE TABLE node(uri TEXT PRIMARY KEY, value TEXT);
+        CREATE TABLE node(
+            uri TEXT PRIMARY KEY,
+            value TEXT,
+            automatic INT DEFAULT 0);
 
         CREATE TABLE edge(
           source NOT NULL REFERENCES node,
@@ -151,12 +154,13 @@ class Manifest(object):
 
     def insert_node(self, uri, value):
         self.connection.execute(
-            """INSERT INTO node VALUES (?,?);""", [uri, json.dumps(value)])
+            """INSERT INTO node(uri,value) VALUES (?,?);""",
+            [uri, json.dumps(value)])
         self.connection.commit()
 
     def insert_edge(self, source, sink):
         self.connection.execute(
-            """INSERT INTO edge VALUES (?,?);""", [source, sink])
+            """INSERT INTO edge(source,sink) VALUES (?,?);""", [source, sink])
         self.connection.commit()
 
     def run_once(self, swapped=False, dryrun=False, verify=False):
