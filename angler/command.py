@@ -32,12 +32,14 @@ class Command(object):
 
     @classmethod
     def from_arguments(cls, manifest=None, argv=None, exit=True):
-        return cls(**vars(cls.parse_args(manifest, argv, exit)))
+        args = cls.parse_args(manifest, argv, exit)
+        if args is not None:
+            return cls(**vars(args))
 
     @classmethod
     def do(cls):
         def do_command(self, args):
-            obj = cls.from_arguments(self.manifest, args)
+            obj = cls.from_arguments(self.manifest, args, exit=False)
             if obj is not None:
                 obj.run()
         return do_command
@@ -99,6 +101,9 @@ class Add(Command):
     @classmethod
     def parse_args(cls, manifest=None, argv=None, exit=True):
         args = super(Add, cls).parse_args(manifest, argv, exit)
+
+        if args is None:
+            return
 
         if args.status is None:
             args.status = {'': {}}
