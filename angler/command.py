@@ -5,7 +5,34 @@ from angler.util import uri, key_value
 import argparse
 from inspect import cleandoc
 
-class Add(object):
+
+class Command(object):
+    @classmethod
+    def parser(cls):
+        return argparse.ArgumentParser()
+
+    @classmethod
+    def from_arguments(cls, manifest=None, argv=None, exit=True):
+        parser = cls.parser()
+
+        if manifest is None:
+            parser.add_argument('--manifest', '-m', default=default_manifest)
+
+        try:
+            args = parser.parse_args(argv)
+        except SystemExit:
+            if exit:
+                raise
+            else:
+                return
+
+        if manifest is None:
+            manifest = Manifest(args.manifest)
+
+        return args
+
+
+class Add(Command):
     def __init__(self, manifest, uri, status, before, after):
         self.manifest = manifest
         self.uri = uri
@@ -22,30 +49,21 @@ class Add(object):
         """)
 
     @classmethod
-    def from_arguments(cls, manifest=None, argv=None, exit=True):
-        parser = argparse.ArgumentParser()
+    def parser(cls):
+        parser = super(Add, cls).parser()
 
         parser.add_argument('uri', type=uri)
         parser.add_argument('status', nargs='?')
         parser.add_argument('properties', metavar='property=value',
                             type=key_value, nargs='*')
 
-        if manifest is None:
-            parser.add_argument('-m', '--manifest', default=default_manifest)
-
         parser.add_argument('-b', '--before', action='append', default=[])
         parser.add_argument('-a', '--after', action='append', default=[])
+        return parser
 
-        try:
-            args = parser.parse_args(argv)
-        except SystemExit:
-            if exit:
-                raise
-            else:
-                return
-
-        if manifest is None:
-            manifest = Manifest(args.manifest)
+    @classmethod
+    def from_arguments(cls, manifest=None, argv=None, exit=True):
+        args = super(Add, cls).from_arguments(manifest, argv, exit)
 
         if args.status is None:
             args.status = {'': {}}
@@ -75,30 +93,23 @@ class Add(object):
 from itertools import tee
 
 
-class Order(object):
+class Order(Command):
     def __init__(self, manifest, nodes):
         self.manifest = manifest
         self.nodes = nodes
 
     @classmethod
-    def from_arguments(cls, manifest=None, argv=None, exit=True):
-        parser = argparse.ArgumentParser()
+    def parser(cls):
+        parser = super(Order, cls).parser()
 
         parser.add_argument('uri', nargs='+', type=uri)
 
-        if manifest is None:
-            parser.add_argument('--manifest', '-m', default=default_manifest)
+        return parser
 
-        try:
-            args = parser.parse_args(argv)
-        except SystemExit:
-            if exit:
-                raise
-            else:
-                return
-
-        if manifest is None:
-            manifest = Manifest(args.manifest)
+    @classmethod
+    def from_arguments(cls, manifest=None, argv=None, exit=True):
+        args = super(Order, cls).from_arguments(manifest, argv, exit)
+        return cls(manifest, args.uri)
 
     def run(self):
         sources, sinks = tee(self.nodes)
