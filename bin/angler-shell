@@ -8,6 +8,7 @@ import argparse
 import cmd
 import os
 import shlex
+import sys
 
 
 def single_arg(string):
@@ -20,6 +21,7 @@ def single_arg(string):
 class AnglerShell(cmd.Cmd):
     def __init__(self, manifest, history='~/.angler_history'):
         super(AnglerShell, self).__init__()
+        self.isatty = sys.stdin.isatty()
         self.environment = dict()
         self.manifest = manifest
         self.session = Session(manifest)
@@ -42,7 +44,9 @@ class AnglerShell(cmd.Cmd):
 
     @property
     def prompt(self):
-        if self.multiline:
+        if not self.isatty:
+            return ''
+        elif self.multiline:
             return self.environment['prompt2'] + ' '
         else:
             return self.environment['prompt'].format(**self.environment) + ' '
@@ -74,7 +78,8 @@ class AnglerShell(cmd.Cmd):
 
     def default(self, line):
         if line == 'EOF':
-            print('exit')
+            if self.isatty:
+                print('exit')
             return self.do_exit('')
         else:
             return super(AnglerShell, self).default(line)
@@ -84,7 +89,8 @@ class AnglerShell(cmd.Cmd):
             import readline
             last_index = readline.get_current_history_length()
             last_command = readline.get_history_item(last_index)
-            if last_command == 'exit' or last_command.startswith('exit '):
+            if (last_command is not None and (last_command == 'exit'
+                    or last_command.startswith('exit '))):
                 readline.remove_history_item(last_index-1)
         except ImportError:
             pass
