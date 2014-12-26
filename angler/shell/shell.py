@@ -3,16 +3,18 @@ import cmd
 import os
 import shlex
 import sys
+import traceback
 
 
 class Shell(cmd.Cmd):
-    def __init__(self, history, prompt='$'):
+    def __init__(self, history, prompt='$', exit_on_error=False):
         super(Shell, self).__init__()
         self.isatty = sys.stdin.isatty()
         self.environment = dict()
         self.environment['prompt'] = prompt
         self.environment['prompt2'] = '>'
         self.multiline = ''
+        self.exit_on_error = exit_on_error
         if history is not None:
             self.history = os.path.expanduser(history)
             try:
@@ -81,3 +83,10 @@ class Shell(cmd.Cmd):
         except ImportError:
             pass
         return True
+
+    def onecmd(self, line):
+        try:
+            return super(Shell, self).onecmd(line)
+        except Exception as error:
+            traceback.print_exc()
+            return self.exit_on_error
