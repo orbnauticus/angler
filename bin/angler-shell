@@ -98,15 +98,9 @@ class AnglerShell(cmd.Cmd):
             pass
         return True
 
-    def do_add(self, args):
-        add = Add.from_arguments(self.manifest, args)
-        if add is not None:
-            add.run()
+    do_add = Add.do()
 
-    def do_order(self, args):
-        order = Order.from_arguments(self.manifest, args)
-        if order is not None:
-            order.run()
+    do_order = Order.do()
 
     def do_stub(self, args):
         print(args)

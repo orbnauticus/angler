@@ -31,6 +31,14 @@ class Command(object):
 
         return args
 
+    @classmethod
+    def do(cls):
+        def do_command(self, args):
+            obj = cls.from_arguments(self.manifest, args)
+            if obj is not None:
+                obj.run()
+        return do_command
+
 
 class Add(Command):
     def __init__(self, manifest, uri, status, before, after):
