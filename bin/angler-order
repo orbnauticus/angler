@@ -4,8 +4,4 @@ from angler.command import Order
 
 
 if __name__ == '__main__':
-    import argparse
-
-    order = Order.from_arguments()
-
-    order.run()
+    Order.from_arguments().run()

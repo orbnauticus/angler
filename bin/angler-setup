@@ -4,6 +4,4 @@ from angler.command import Setup
 
 
 if __name__ == '__main__':
-    setup = Setup()
-
-    setup.run()
+    Setup.from_arguments().run()

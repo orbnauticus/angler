@@ -4,8 +4,4 @@ from angler.command import Add
 
 
 if __name__ == '__main__':
-    import argparse
-
-    add = Add.from_arguments()
-
-    add.run()
+    Add.from_arguments().run()
