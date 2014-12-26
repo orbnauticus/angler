@@ -98,13 +98,20 @@ class AnglerShell(cmd.Cmd):
             pass
         return True
 
+    def do_help(self, args):
+        super(AnglerShell, self).do_help(args[0])
+
     do_setup = Setup.do()
+    help_setup = Setup.help()
 
     do_add = Add.do()
+    help_add = Add.help()
 
     do_order = Order.do()
+    help_order = Order.help()
 
     do_apply = Apply.do()
+    help_apply = Apply.help()
 
     def do_stub(self, args):
         print(args)
@@ -131,6 +138,3 @@ class AnglerShell(cmd.Cmd):
                 print('{}://'.format(scheme))
         else:
             print('Not Implemented!')
-
-    def help_add(self):
-        print(Add.help())

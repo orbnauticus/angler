@@ -44,6 +44,13 @@ class Command(object):
                 obj.run()
         return do_command
 
+    @classmethod
+    def help(cls):
+        def help_command(self):
+            print (cleandoc(cls.__doc__) if cls.__doc__ else
+                    "No help available.")
+        return help_command
+
 
 class Setup(Command):
     def __init__(self, manifest):
@@ -70,20 +77,17 @@ class Setup(Command):
 
 
 class Add(Command):
+    """
+    add uri [status] [property=value [property=value ...]]
+
+    Add a node at uri to the manifest.
+    """
     def __init__(self, manifest, uri, status, before, after):
         self.manifest = manifest
         self.uri = uri
         self.status = status
         self.before = before
         self.after = after
-
-    @classmethod
-    def help(self):
-        return cleandoc("""
-        add uri [status] [property=value [property=value ...]]
-
-        Add a node at uri to the manifest.
-        """)
 
     @classmethod
     def parser(cls):
@@ -135,6 +139,11 @@ from itertools import tee
 
 
 class Order(Command):
+    """
+    usage: order uri uri [uri ...]
+
+    Assert an order for a chain of two or more nodes
+    """
     def __init__(self, manifest, nodes):
         self.manifest = manifest
         self.nodes = nodes
