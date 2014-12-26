@@ -18,27 +18,38 @@ def single_arg(string):
 
 
 class AnglerShell(cmd.Cmd):
-    def __init__(self, manifest):
+    def __init__(self, manifest, history='~/.angler_history'):
         super(AnglerShell, self).__init__()
-        self.settings = dict()
+        self.environment = dict()
         self.manifest = manifest
         self.session = Session(manifest)
-        self.settings['manifest'] = manifest.database
-        self.settings['curdir'] = ''
+        self.environment['manifest'] = manifest.database
+        self.environment['curdir'] = ''
         self.prompt = '{manifest}#{curdir}⟫'
-        self.settings['prompt2'] = '>'
+        self.environment['prompt2'] = '>'
         self.multiline = ''
+        self.history = os.path.expanduser(history)
+        try:
+            import readline
+            readline.read_history_file(self.history)
+        except FileNotFoundError:
+            pass
+        except ImportError:
+            pass
+        else:
+            import atexit
+            atexit.register(readline.write_history_file, self.history)
 
     @property
     def prompt(self):
         if self.multiline:
-            return self.settings['prompt2'] + ' '
+            return self.environment['prompt2'] + ' '
         else:
-            return self.settings['prompt'].format(**self.settings) + ' '
+            return self.environment['prompt'].format(**self.environment) + ' '
 
     @prompt.setter
     def prompt(self, new):
-        self.settings['prompt'] = new
+        self.environment['prompt'] = new
 
     def emptyline(self):
         pass
@@ -64,11 +75,19 @@ class AnglerShell(cmd.Cmd):
     def default(self, line):
         if line == 'EOF':
             print('exit')
-            return True
+            return self.do_exit('')
         else:
             return super(AnglerShell, self).default(line)
 
     def do_exit(self, args):
+        try:
+            import readline
+            last_index = readline.get_current_history_length()
+            last_command = readline.get_history_item(last_index)
+            if last_command == 'exit' or last_command.startswith('exit '):
+                readline.remove_history_item(last_index-1)
+        except ImportError:
+            pass
         return True
 
     def do_add(self, args):
@@ -83,21 +102,21 @@ class AnglerShell(cmd.Cmd):
 
     def do_var(self, args):
         if not args:
-            for key in sorted(self.settings):
-                print('{}={!r}'.format(key, self.settings[key]))
+            for key in sorted(self.environment):
+                print('{}={!r}'.format(key, self.environment[key]))
             return
         key, successful, value = arg.partition('=')
         if successful:
-            self.settings[key.strip()] = single_arg(value)
+            self.environment[key.strip()] = single_arg(value)
         else:
             key = arg.strip()
-            print('{}={!r}'.format(key, self.settings[key]))
+            print('{}={!r}'.format(key, self.environment[key]))
 
     def do_cd(self, args):
-        self.settings['curdir'] = args[0]
+        self.environment['curdir'] = args[0]
 
     def do_ls(self, args):
-        arg = (args[:0] or [self.settings['curdir']])[0]
+        arg = (args[:0] or [self.environment['curdir']])[0]
         if not arg:
             for scheme in self.manifest.plugins:
                 print('{}://'.format(scheme))
@@ -124,7 +143,7 @@ if __name__ == '__main__':
 
     try:
         shell = AnglerShell(manifest)
-        shell.settings['dryrun'] = args.dryrun
+        shell.environment['dryrun'] = args.dryrun
         shell.cmdloop()
     except KeyboardInterrupt:
         print()
