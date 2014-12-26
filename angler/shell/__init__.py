@@ -21,10 +21,11 @@ def single_arg(string):
 
 
 class AnglerShell(Shell):
-    def __init__(self, manifest, history='~/.angler_history'):
+    def __init__(self, manifest, history='~/.angler_history', **kwargs):
         super(AnglerShell, self).__init__(
             history,
-            prompt='{manifest}#{curdir}⟫')
+            prompt='{manifest}#{curdir}⟫',
+            **kwargs)
         self.manifest = manifest
         self.session = Session(manifest)
         self.environment['manifest'] = manifest.database

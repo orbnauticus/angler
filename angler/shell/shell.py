@@ -7,9 +7,10 @@ import traceback
 
 
 class Shell(cmd.Cmd):
-    def __init__(self, history, prompt='$', exit_on_error=False):
-        super(Shell, self).__init__()
-        self.isatty = sys.stdin.isatty()
+    def __init__(self, history, stdin=None, stdout=None, prompt='$',
+                 exit_on_error=False):
+        super(Shell, self).__init__(stdin=stdin, stdout=stdout)
+        self.isatty = self.stdin.isatty()
         self.environment = dict()
         self.environment['prompt'] = prompt
         self.environment['prompt2'] = '>'
@@ -49,7 +50,7 @@ class Shell(cmd.Cmd):
             line = '{}\n{}'.format(self.multiline, line)
         self.multiline = ''
         try:
-            words = shlex.split(line)
+            words = shlex.split(line, comments=True)
         except ValueError as error:
             if error.args == ('No closing quotation',):
                 self.multiline = line
