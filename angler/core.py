@@ -23,11 +23,13 @@ from .plugin import Definition
 def setup(database):
     connection = sqlite3.connect(database)
     connection.executescript("""
+        DROP TABLE IF EXISTS node;
         CREATE TABLE node(
             uri TEXT PRIMARY KEY,
             value TEXT,
             automatic INT DEFAULT 0);
 
+        DROP TABLE IF EXISTS edge;
         CREATE TABLE edge(
           source NOT NULL REFERENCES node,
           sink NOT NULL REFERENCES node,

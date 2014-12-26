@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from angler.core import Manifest, default_manifest, Session, setup
-from angler.command import Add, Order, Apply
+from angler.command import Add, Order, Apply, Setup
 from angler.util import uri, key_value
 
 import argparse
@@ -97,6 +97,8 @@ class AnglerShell(cmd.Cmd):
         except ImportError:
             pass
         return True
+
+    do_setup = Setup.do()
 
     do_add = Add.do()
 

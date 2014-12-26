@@ -1,9 +1,7 @@
 #!/bin/sh
 
-debug () { echo '**' "$@"; "$@"; }
-
-rm angler.manifest 2>/dev/null || true
 PYTHONPATH=. bin/angler-shell <<EOF
+setup
 add package:///bash install
 add path:///home/user/bin/script file
 add path:///home/user/bin/script?permission exact mode=0755
@@ -13,4 +11,3 @@ order package:///bash exec:///run-script
 apply -n
 apply -n --swap
 EOF
-rm angler.manifest

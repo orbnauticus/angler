@@ -1,15 +1,9 @@
 #!/usr/bin/env python3
 
-from angler.core import setup, default_manifest
+from angler.command import Setup
 
 
 if __name__ == '__main__':
-    import argparse
+    setup = Setup()
 
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument('--manifest', '-m', default=default_manifest)
-
-    args = parser.parse_args()
-
-    setup(args.manifest)
+    setup.run()

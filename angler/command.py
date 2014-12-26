@@ -1,5 +1,5 @@
 
-from angler.core import Manifest, default_manifest
+from angler.core import Manifest, default_manifest, setup
 from angler.util import uri, key_value
 
 import argparse
@@ -41,6 +41,30 @@ class Command(object):
             if obj is not None:
                 obj.run()
         return do_command
+
+
+class Setup(Command):
+    def __init__(self, manifest):
+        self.manifest = manifest
+
+    @classmethod
+    def parse_args(cls, manifest=None, argv=None, exit=True):
+        parser = cls.parser()
+
+        parser.add_argument('--manifest', '-m', default=default_manifest)
+
+        try:
+            args = parser.parse_args(argv)
+        except SystemExit:
+            if exit:
+                raise
+            else:
+                return
+
+        return args
+
+    def run(self):
+        setup(self.manifest)
 
 
 class Add(Command):
