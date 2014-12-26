@@ -10,7 +10,7 @@ add path:///home/user/bin/script?permission exact mode=0755
 add process:///run-script once command="bash bin/script"
 add path:///home/user/.bashrc file --before process:///run-script
 order package:///bash exec:///run-script
-run
-run --swap
+apply -n
+apply -n --swap
 EOF
 rm angler.manifest

@@ -1,24 +1,11 @@
 #!/usr/bin/env python3
 
-from angler.core import Manifest, default_manifest
+from angler.command import Apply
 
 
 if __name__ == '__main__':
     import argparse
 
-    parser = argparse.ArgumentParser()
+    apply = Apply.from_arguments()
 
-    parser.add_argument('--manifest', '-m', default=default_manifest)
-    parser.add_argument('--swap', '-s', action='store_true',
-                        help='Reverse order of nodes in each stage.'
-                             ' Useful for checking if there are any missing'
-                             ' relationships')
-    parser.add_argument('--dryrun', '-n', action='store_true',
-                        help='List what actions would be taken without making'
-                             ' any changes')
-
-    args = parser.parse_args()
-
-    manifest = Manifest(args.manifest)
-
-    manifest.run_once(args.swap, dryrun=args.dryrun)
+    apply.run()

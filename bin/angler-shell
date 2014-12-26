@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from angler.core import Manifest, default_manifest, Session, setup
-from angler.command import Add, Order
+from angler.command import Add, Order, Apply
 from angler.util import uri, key_value
 
 import argparse
@@ -101,6 +101,8 @@ class AnglerShell(cmd.Cmd):
     do_add = Add.do()
 
     do_order = Order.do()
+
+    do_apply = Apply.do()
 
     def do_stub(self, args):
         print(args)

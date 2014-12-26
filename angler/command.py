@@ -12,7 +12,7 @@ class Command(object):
         return argparse.ArgumentParser()
 
     @classmethod
-    def from_arguments(cls, manifest=None, argv=None, exit=True):
+    def parse_args(cls, manifest=None, argv=None, exit=True):
         parser = cls.parser()
 
         if manifest is None:
@@ -26,10 +26,13 @@ class Command(object):
             else:
                 return
 
-        if manifest is None:
-            manifest = Manifest(args.manifest)
-
+        args.manifest = (Manifest(args.manifest) if manifest is None
+                         else manifest)
         return args
+
+    @classmethod
+    def from_arguments(cls, manifest=None, argv=None, exit=True):
+        return cls(**vars(cls.parse_args(manifest, argv, exit)))
 
     @classmethod
     def do(cls):
@@ -70,8 +73,8 @@ class Add(Command):
         return parser
 
     @classmethod
-    def from_arguments(cls, manifest=None, argv=None, exit=True):
-        args = super(Add, cls).from_arguments(manifest, argv, exit)
+    def parse_args(cls, manifest=None, argv=None, exit=True):
+        args = super(Add, cls).parse_args(manifest, argv, exit)
 
         if args.status is None:
             args.status = {'': {}}
@@ -85,8 +88,9 @@ class Add(Command):
 
         if args.properties:
             args.status[key].update(dict(args.properties))
+        del args.properties
 
-        return cls(manifest, args.uri, args.status, args.before, args.after)
+        return args
 
     def run(self):
         self.manifest.insert_node(self.uri, self.status)
@@ -109,15 +113,8 @@ class Order(Command):
     @classmethod
     def parser(cls):
         parser = super(Order, cls).parser()
-
-        parser.add_argument('uri', nargs='+', type=uri)
-
+        parser.add_argument('nodes', nargs='+', type=uri, metavar='uri')
         return parser
-
-    @classmethod
-    def from_arguments(cls, manifest=None, argv=None, exit=True):
-        args = super(Order, cls).from_arguments(manifest, argv, exit)
-        return cls(manifest, args.uri)
 
     def run(self):
         sources, sinks = tee(self.nodes)
@@ -125,3 +122,25 @@ class Order(Command):
 
         for source, sink in zip(sources, sinks):
             self.manifest.insert_edge(source, sink)
+
+
+class Apply(Command):
+    def __init__(self, manifest, swap, dryrun):
+        self.manifest = manifest
+        self.swap = swap
+        self.dryrun = dryrun
+
+    @classmethod
+    def parser(cls):
+        parser = super(Apply, cls).parser()
+        parser.add_argument('--swap', '-s', action='store_true',
+                            help='Reverse order of nodes in each stage.'
+                                 ' Useful for checking if there are any missing'
+                                 ' relationships')
+        parser.add_argument('--dryrun', '-n', action='store_true',
+                            help='List what actions would be taken without making'
+                                 ' any changes')
+        return parser
+
+    def run(self):
+        self.manifest.run_once(self.swap, dryrun=self.dryrun)
