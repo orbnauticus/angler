@@ -1,6 +1,5 @@
-#!/bin/sh
+#!/usr/bin/env angler-shell
 
-PYTHONPATH=. bin/angler-shell <<EOF
 setup
 add package:///bash install
 add path:///home/user/bin/script file
@@ -10,4 +9,3 @@ add path:///home/user/.bashrc file --before process:///run-script
 order package:///bash exec:///run-script
 apply -n
 apply -n --swap
-EOF
