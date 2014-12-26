@@ -36,7 +36,13 @@ class Add(object):
         parser.add_argument('-b', '--before', action='append', default=[])
         parser.add_argument('-a', '--after', action='append', default=[])
 
-        args = parser.parse_args(argv)
+        try:
+            args = parser.parse_args(argv)
+        except SystemExit:
+            if exit:
+                raise
+            else:
+                return
 
         if manifest is None:
             manifest = Manifest(args.manifest)
@@ -64,3 +70,39 @@ class Add(object):
 
         for node in self.after:
             self.manifest.insert_edge(node, self.uri)
+
+
+from itertools import tee
+
+
+class Order(object):
+    def __init__(self, manifest, nodes):
+        self.manifest = manifest
+        self.nodes = nodes
+
+    @classmethod
+    def from_arguments(cls, manifest=None, argv=None, exit=True):
+        parser = argparse.ArgumentParser()
+
+        parser.add_argument('uri', nargs='+', type=uri)
+
+        if manifest is None:
+            parser.add_argument('--manifest', '-m', default=default_manifest)
+
+        try:
+            args = parser.parse_args(argv)
+        except SystemExit:
+            if exit:
+                raise
+            else:
+                return
+
+        if manifest is None:
+            manifest = Manifest(args.manifest)
+
+    def run(self):
+        sources, sinks = tee(self.nodes)
+        next(sinks, None)
+
+        for source, sink in zip(sources, sinks):
+            self.manifest.insert_edge(source, sink)

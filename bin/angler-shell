@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from angler.core import Manifest, default_manifest, Session, setup
-from angler.command import Add
+from angler.command import Add, Order
 from angler.util import uri, key_value
 
 import argparse
@@ -97,11 +97,14 @@ class AnglerShell(cmd.Cmd):
         return True
 
     def do_add(self, args):
-        try:
-            add = Add.from_arguments(self.manifest, args)
-        except SystemExit:
-            return
-        add.run()
+        add = Add.from_arguments(self.manifest, args)
+        if add is not None:
+            add.run()
+
+    def do_order(self, args):
+        order = Order.from_arguments(self.manifest, args)
+        if order is not None:
+            order.run()
 
     def do_stub(self, args):
         print(args)
