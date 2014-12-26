@@ -1,3 +1,4 @@
 *.pyc
 chroot
 chroot.tar.gz
+angler.manifest
