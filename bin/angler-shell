@@ -71,6 +71,8 @@ class AnglerShell(cmd.Cmd):
             elif error.args == ('No escaped character',):
                 self.multiline = line[:-1]
                 return None, None, ''
+            else:
+                raise
         if not words:
             return None, None, ''
         cmd, arg = words[0], words[1:]
