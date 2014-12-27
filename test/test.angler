@@ -7,5 +7,6 @@ add path:///home/user/bin/script?permission exact mode=0755
 add process:///run-script once command="bash bin/script"
 add path:///home/user/.bashrc file --before process:///run-script
 order package:///bash exec:///run-script
+order path:///home/user/bin/script?permission exec:///run-script
 apply -n
 apply -n --swap

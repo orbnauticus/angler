@@ -27,7 +27,7 @@ class AnglerShell(Shell):
             prompt='{manifest}#{curdir}⟫',
             **kwargs)
         self.manifest = manifest
-        self.session = Session(manifest)
+        #self.session = Session(manifest)
         self.environment['manifest'] = manifest.database
         self.environment['curdir'] = ''
 

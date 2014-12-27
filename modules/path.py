@@ -22,18 +22,18 @@ class Path(Definition):
             value={"folder": {}},
         )
 
-    def found_node(self, session):
+    def found_node(self, manifest):
         if self.query:
             base = self.copy(query='', value=None)
-            session.add_node(base)
-            base.found_node(session)
-            session.add_edge(base, self)
+            manifest.add_definition(base)
+            base.found_node(manifest)
+            manifest.add_order(base, self)
         else:
             parent = self.get_parent()
             if parent:
-                session.add_node(parent)
-                parent.found_node(session)
-                session.add_edge(parent, self)
+                manifest.add_definition(parent)
+                parent.found_node(manifest)
+                manifest.add_order(parent, self)
 
     def get_state(self):
         if not self.query:

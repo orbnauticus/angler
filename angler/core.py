@@ -27,12 +27,13 @@ def setup(database):
         CREATE TABLE node(
             uri TEXT PRIMARY KEY,
             value TEXT,
-            automatic INT DEFAULT 0);
+            author TEXT);
 
         DROP TABLE IF EXISTS edge;
         CREATE TABLE edge(
           source NOT NULL REFERENCES node,
           sink NOT NULL REFERENCES node,
+          author TEXT,
           PRIMARY KEY(source, sink) ON CONFLICT REPLACE);
         """)
 
@@ -41,10 +42,16 @@ class CycleError(Exception):
     pass
 
 
-Edge = namedtuple('Edge', 'source sink')
+Edge = namedtuple('Edge', 'source sink author')
 
 
-class Node(namedtuple('Node', 'uri value')):
+class Node(namedtuple('Node', 'uri value author')):
+    @classmethod
+    def from_sql(cls, row):
+        if row is None:
+            return
+        return cls(row[0], json.loads(row[1]), row[2])
+
     def __hash__(self):
         return hash(self.uri)
 
@@ -54,40 +61,12 @@ class Node(namedtuple('Node', 'uri value')):
 
 class Session(object):
     def __init__(self, manifest):
-        self.nodes = set(
-            Node(uri, json.loads(value)) for uri, value in
-            manifest.connection.execute("""SELECT uri, value FROM node"""))
+        self.nodes = set(Node.from_sql(row) for row in
+            manifest.connection.execute(
+                """SELECT uri, value, author FROM node"""))
         self.edges = set(Edge(*row) for row in manifest.connection.execute("""
-            SELECT source, sink FROM edge"""))
+            SELECT source, sink, author FROM edge"""))
         self.logger = logging.getLogger('session')
-
-    def add_node(self, node):
-        uri = node.get_uri()
-        new_node = Node(uri, node.value)
-        conflicts = set(node for node in self.nodes
-                        if node.uri == new_node.uri)
-        if conflicts:
-            if new_node.value is None:
-                return
-            conflict_node = conflicts.pop()
-            assert len(conflicts) == 0
-            if conflict_node.value is None:
-                self.nodes.add(new_node)
-            elif conflict_node.value == new_node.value:
-                return
-            else:
-                raise ValueError((uri, conflict_node.value, new_node.value))
-        else:
-            self.logger.debug('Found automatic node {} = {!r}'.format(
-                uri, node.value))
-            self.nodes.add(new_node)
-
-    def add_edge(self, source, sink):
-        source_uri = source.get_uri()
-        sink_uri = sink.get_uri()
-        self.logger.debug('Found automatic edge {} -> {}'.format(
-            source_uri, sink_uri))
-        self.edges.add(Edge(source_uri, sink_uri))
 
     def __iter__(self):
         return self
@@ -156,27 +135,53 @@ class Manifest(object):
         self.connection = sqlite3.connect(database)
         self.plugins = PluginManager(searchpaths=['modules'])
         self.plugins.discover()
+        self.logger = logging.getLogger('manifest')
 
-    def insert_node(self, uri, value):
+    def add_definition(self, definition):
+        self.insert_node(definition.get_uri(), definition.value,
+                         definition.get_uri())
+
+    def insert_node(self, uri, value, author=None):
+        conflict_node = Node.from_sql(self.connection.execute(
+            """SELECT * FROM node WHERE uri=?""", [uri]).fetchone())
+        if conflict_node and (value is None or conflict_node.value == value):
+            return
+        elif conflict_node and conflict_node.value is None:
+            pass
+        elif conflict_node is not None:
+            raise ValueError((uri, conflict_node.value, value))
+        else:
+            self.logger.debug('Found{} node {} = {!r}'.format(
+                '' if author is None else ' automatic', uri, value))
         self.connection.execute(
-            """INSERT INTO node(uri,value) VALUES (?,?);""",
-            [uri, json.dumps(value)])
+            """INSERT INTO node(uri,value,author) VALUES (?,?,?);""",
+            [uri, json.dumps(value), author])
         self.connection.commit()
+        definition = self.plugins.definition_from_node(
+            Node(uri, value, author))
+        if definition is None:
+            self.logger.error('No handler for {!r}'.format(uri))
+        else:
+            definition.found_node(self)
 
-    def insert_edge(self, source, sink):
+    def add_order(self, before, after, author=None):
+        self.insert_edge(before.get_uri(), after.get_uri(), author)
+
+    def insert_edge(self, source, sink, author=None):
+        if self.connection.execute("SELECT * FROM edge WHERE"
+                                   " source=? and sink=?", [source, sink]
+                                   ).fetchone():
+            return
+        self.logger.debug('Found{} edge {} -> {}'.format(
+            '' if author is None else ' automatic', source, sink))
         self.connection.execute(
-            """INSERT INTO edge(source,sink) VALUES (?,?);""", [source, sink])
+            """INSERT INTO edge(source,sink,author) VALUES (?,?,?);""",
+            [source, sink, author])
         self.connection.commit()
 
     def run_once(self, swapped=False, dryrun=False, verify=False):
         session = Session(self)
         self.logger = logging.getLogger('manifest')
-        for node in set(session.nodes):
-            definition = self.plugins.definition_from_node(node)
-            if definition is None:
-                self.logger.error('No handler for {!r}'.format(node.uri))
-            else:
-                definition.found_node(session)
         for level, stage in enumerate(session):
             logger = logging.getLogger('stage[{}]'.format(level))
             for node in sorted(stage, reverse=swapped):
