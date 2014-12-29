@@ -4,7 +4,8 @@ from angler.core import Manifest, default_manifest, Session, setup
 from angler.command import Add, Order, Apply, Setup
 from angler.util import uri, key_value
 
-from .shell import Shell
+from .shell import Lookup
+from .vfs import VfsShell, SettingsVFS
 
 import argparse
 import cmd
@@ -20,19 +21,21 @@ def single_arg(string):
     return values[0]
 
 
-class AnglerShell(Shell):
+class AnglerShell(VfsShell):
     def __init__(self, manifest, history='~/.angler_history', **kwargs):
-        super(AnglerShell, self).__init__(
+        VfsShell.__init__(
+            self,
             history,
-            prompt='{manifest}#{curdir}⟫',
+            prompt='{manifest}:{pwd}⟫',
+            startpath='/',
+            pwdname='pwd',
             **kwargs)
         self.manifest = manifest
-        #self.session = Session(manifest)
-        self.environment['manifest'] = manifest.database
-        self.environment['curdir'] = ''
+        self.environment['manifest'] = Lookup(self.manifest, attr='database')
+        self.vfs_mount('/settings', SettingsVFS(self.manifest))
 
     def do_help(self, args):
-        super(AnglerShell, self).do_help(args[0])
+        super(AnglerShell, self).do_help(args[0] if args else '')
 
     do_setup = Setup.do()
     help_setup = Setup.help()
@@ -60,14 +63,3 @@ class AnglerShell(Shell):
         else:
             key = arg.strip()
             print('{}={!r}'.format(key, self.environment[key]))
-
-    def do_cd(self, args):
-        self.environment['curdir'] = args[0]
-
-    def do_ls(self, args):
-        arg = (args[:0] or [self.environment['curdir']])[0]
-        if not arg:
-            for scheme in self.manifest.plugins:
-                print('{}://'.format(scheme))
-        else:
-            print('Not Implemented!')

@@ -1,9 +1,74 @@
 
 import cmd
+import collections
+import json
 import os
 import shlex
 import sys
 import traceback
+
+
+class Lookup(object):
+    def __init__(self, obj, attr=None, item=None):
+        self.attr = attr
+        self.item = item
+        self.obj = obj
+
+    def get(self):
+        if self.attr is not None:
+            return getattr(self.obj, self.attr)
+        else:
+            return self.obj[self.item]
+
+
+class Environment(collections.MutableMapping):
+    def __init__(self):
+        self.namespace = dict()
+
+    def __getitem__(self, key):
+        value = self.namespace[key]
+        if isinstance(value, Lookup):
+            return value.get()
+        return value
+
+    def __missing__(self, key):
+        return ''
+
+    def __setitem__(self, key, value):
+        self.namespace[key] = value
+
+    def __delitem__(self, key):
+        del self.namespace[key]
+
+    def __len__(self):
+        return len(self.namespace)
+
+    def __iter__(self):
+        return iter(self.namespace)
+
+
+class CastMapping(dict):
+    casts = dict(
+        obj=json.loads,
+        str=str,
+        int=int,
+        real=float,
+    )
+
+    def __getitem__(self, key):
+        name, has_cast, cast = key.partition(':')
+        value = super(CastMapping, self).__getitem__(name)
+        if has_cast:
+            cast_func = self.casts[cast]
+            value = cast_func(value)
+        return value
+
+    def __setitem__(self, key, value):
+        name, has_cast, cast = key.partition(':')
+        if has_cast:
+            cast_func = self.casts[cast]
+            value = cast_func(value)
+        super(CastMapping, self).__setitem__(name, value)
 
 
 class Shell(cmd.Cmd):
@@ -11,7 +76,7 @@ class Shell(cmd.Cmd):
                  exit_on_error=False):
         super(Shell, self).__init__(stdin=stdin, stdout=stdout)
         self.isatty = self.stdin.isatty()
-        self.environment = dict()
+        self.environment = Environment()
         self.environment['prompt'] = prompt
         self.environment['prompt2'] = '>'
         self.multiline = ''
