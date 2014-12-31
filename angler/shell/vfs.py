@@ -1,5 +1,6 @@
 
 from abc import ABCMeta, abstractmethod
+from collections import defaultdict
 import logging
 import os
 import re
@@ -67,6 +68,10 @@ class VirtualFileSystem(metaclass=ABCMeta):
     def write_file(self, path, contents):
         pass
 
+    @abstractmethod
+    def read_file(self, path):
+        pass
+
 
 class MemoryVFS(VirtualFileSystem):
     def __init__(self):
@@ -74,7 +79,7 @@ class MemoryVFS(VirtualFileSystem):
         self.make_directory('/')
 
     def make_directory(self, path):
-        self.paths[path] = PathInfo.folder()
+        self.paths[path] = PathInfo.folder(), None
 
     def list_directory(self, path):
         if path not in self.paths:
@@ -98,11 +103,19 @@ class MemoryVFS(VirtualFileSystem):
         return
 
     def write_file(self, path, contents):
-        return
+        if path not in self.paths:
+            raise FileNotFoundError
+        self.paths[path]['content'] = contents
+
+    def read_file(self, path):
+        if path not in self.paths:
+            raise FileNotFoundError
+        return self.paths[path]['content']
 
 
 class VirtualHierarchy(object):
     def __init__(self, rootfs, pwd):
+        self.logger = logging.getLogger('vfs')
         self.pwd = pwd
         self.mountpoints = dict()
         self.mount('/', rootfs)
@@ -125,7 +138,7 @@ class VirtualHierarchy(object):
         point = self.abspath(point)
         if point.endswith('/'):
             point = point.rstrip('/')
-        logging.getLogger('vfs').debug("Mounting {} at {}".format(
+        self.logger.debug("Mounting {} at {}".format(
             filesystem, point or '/'))
         self.mountpoints[point] = filesystem
 
@@ -135,17 +148,27 @@ class VirtualHierarchy(object):
 
     def walk(self, path):
         def visit(item):
-            logging.debug('Visit {}'.format(item))
-            print(item)
+            yield item
             entity = self.lookup(item)
             if entity.is_folder():
                 for name in self.list_directory(item):
-                    visit(os.path.join(item, name))
-        visit(abspath(path, self.pwd))
+                    for child in visit(os.path.join(item, name)):
+                        yield child
+        return iter(visit(abspath(path, self.pwd)))
 
     def list_directory(self, path):
         filesystem, _, subpath = self.get_filesystem_for(path)
         return filesystem.list_directory(subpath)
+
+    def read_file(self, path):
+        path = self.abspath(path)
+        self.logger.debug('Reading {}'.format(path))
+        filesystem, _, subpath = self.get_filesystem_for(path)
+        return filesystem.read_file(subpath)
+
+    def cd(self, path):
+        self.pwd = self.abspath(path)
+        self.logger.debug('Changed working directory to {}'.format(self.pwd))
 
 
 class PathInfo(dict):
@@ -159,8 +182,9 @@ class PathInfo(dict):
 
 
 class SettingsVFS(VirtualFileSystem):
-    def __init__(self, manifest):
+    def __init__(self, manifest, settings=None):
         self.manifest = manifest
+        self.settings = settings or defaultdict(dict)
 
     def read(self, path):
         if path == '/module_path':
@@ -173,11 +197,14 @@ class SettingsVFS(VirtualFileSystem):
             return PathInfo.file()
 
     def list_directory(self, path):
-        logging.getLogger('settingsvfs').debug(
-            "List directory {}".format(path))
         if path == '/':
             return ['module_path']
         raise FileNotFoundError
+
+    def list_directory(self, path):
+        if path != '/':
+            raise FileNotFoundError(path)
+        return ['module_path']
 
     def get_contents(self, path):
         pass
@@ -187,6 +214,11 @@ class SettingsVFS(VirtualFileSystem):
 
     def write_file(self, path, contents):
         pass
+
+    def read_file(self, path):
+        if path == '/module_path':
+            return ['modules']
+        raise FileNotFoundError
 
 
 class VfsShell(Shell):
@@ -212,5 +244,8 @@ class VfsShell(Shell):
             print(name)
 
     def do_find(self, args):
-        for path in self.vfs.walk(args[0] or '.'):
+        for path in self.vfs.walk(args[0] if args else '.'):
             print(path)
+
+    def do_cat(self, args):
+        print(self.vfs.read_file(args[0] if args else '.'))
