@@ -182,13 +182,12 @@ class PathInfo(dict):
 
 
 class SettingsVFS(VirtualFileSystem):
-    def __init__(self, manifest, settings=None):
-        self.manifest = manifest
-        self.settings = settings or defaultdict(dict)
+    def __init__(self, settings):
+        self.settings = settings
 
     def read(self, path):
         if path == '/module_path':
-            return self.manifest.plugins.searchpaths
+            return self.settings.getall('plugin path')
 
     def get_info(self, path):
         if path == '/':

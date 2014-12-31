@@ -33,7 +33,7 @@ class AnglerShell(VfsShell):
         self.manifest = manifest
         self.environment['manifest'] = Lookup(self.manifest, attr='database')
         self.vfs.mkdir('/settings')
-        self.vfs.mount('/settings', SettingsVFS(self.manifest))
+        self.vfs.mount('/settings', SettingsVFS(self.manifest.settings))
 
     def do_help(self, args):
         super(AnglerShell, self).do_help(args[0] if args else '')

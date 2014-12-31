@@ -18,6 +18,7 @@ else:
     logging.basicConfig(handlers=handlers(), level=logging.DEBUG)
 
 from .plugin import Definition
+from .config import Configuration
 
 
 def setup(database):
@@ -131,11 +132,12 @@ class PluginManager(dict):
 
 class Manifest(object):
     def __init__(self, database):
+        self.logger = logging.getLogger('manifest')
+        self.settings = Configuration()
         self.database = database
         self.connection = sqlite3.connect(database)
         self.plugins = PluginManager(searchpaths=['modules'])
         self.plugins.discover()
-        self.logger = logging.getLogger('manifest')
 
     def add_definition(self, definition):
         self.insert_node(definition.get_uri(), definition.value,
