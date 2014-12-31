@@ -1,55 +1,21 @@
 
+from abc import ABCMeta, abstractmethod
 import logging
 import os
+import re
 
 from .shell import Shell, Lookup
 
 
 class VirtualEntity(object):
-    def __init__(self, name, parent):
-        self.name = name
-        self.parent = parent
-
-    def path(self):
-        return ('/'.join((self.parent.path() or '', self.name))
-                if self.parent else self.name)
-
-
-class VirtualFile(object):
-    pass
-
-
-class VirtualFolder(VirtualEntity, dict):
-    def __getitem__(self, key):
-        first, complex, remainder = key.partition('/')
-        if first == '..':
-            item = self.parent
-        elif first == '.':
-            item = self
-
-        else:
-            item = dict.__getitem__(self, first)
-        if complex:
-            return item[remainder]
-        return item
-
-    def mkdir(self, name):
-        self[name] = VirtualFolder(name, self)
-
-
-class VFSEntity(object):
-    def __init__(self, filesystem, path):
+    def __init__(self, hierarchy, filesystem, fspath, path):
+        self.hierarchy = hierarchy
         self.filesystem = filesystem
+        self.fspath = fspath
         self.path = path
 
     def get_info(self):
         return self.filesystem.get_info(self.path)
-
-    def list_directory(self):
-        return self.filesystem.list_directory(self.path)
-
-    def read(self):
-        return self.filesystem.read(self.path)
 
     def is_folder(self):
         info = self.get_info()
@@ -66,42 +32,120 @@ def subpath(path, child):
     return False
 
 
-class VirtualFileSystem(object):
-    def __init__(self):
-        self.mountpoints = {'':self}
-
-    def list_directory(self, path):
-        if path != '/':
-            raise FileNotFoundError(path)
-        logging.getLogger('vfs').debug('Searching {}'.format(self.mountpoints))
-        return sorted(set(point.split('/')[1] for point in self.mountpoints
-                          if '/' in point))
-
-    def get_info(self, path):
-        if path == '/' or path in self.mountpoints:
-            return PathInfo.folder()
-        raise FileNotFoundError(path)
-
-    def lookup(self, path):
-        subpaths = [(pnt, subpath(pnt, path)) for pnt in self.mountpoints]
-        mountpoint, sub = max(((point, sub) for point, sub in subpaths
-                                  if sub), key=lambda x:len(x[0]))
-        fs = self.mountpoints[mountpoint]
-        return VFSEntity(fs, sub)
-
-    def mount(self, point, filesystem):
-        if point.endswith('/'):
-            point = point.rstrip('/')
-        logging.getLogger('vfs').debug("Mounting {} at {}".format(
-            filesystem, point))
-        self.mountpoints[point] = filesystem
-
-
 def abspath(path, pwd):
     if path.startswith('/'):
         return os.path.abspath(path)
     else:
         return os.path.normpath(os.path.join(pwd, path))
+
+
+def poproot(path):
+    match = re.match("(/[^/]+)(/.*)?", path)
+    if match is None:
+        raise ValueError('{} did not match /*/*'.format(path))
+    return match.groups()
+
+
+class VirtualFileSystem(metaclass=ABCMeta):
+    @abstractmethod
+    def get_info(self, path):
+        pass
+
+    @abstractmethod
+    def get_contents(self, path):
+        pass
+
+    @abstractmethod
+    def list_directory(self, path):
+        pass
+
+    @abstractmethod
+    def make_directory(self, path):
+        pass
+
+    @abstractmethod
+    def write_file(self, path, contents):
+        pass
+
+
+class MemoryVFS(VirtualFileSystem):
+    def __init__(self):
+        self.paths = dict()
+        self.make_directory('/')
+
+    def make_directory(self, path):
+        self.paths[path] = PathInfo.folder()
+
+    def list_directory(self, path):
+        if path not in self.paths:
+            raise FileNotFoundError(path)
+        for child in self.paths:
+            try:
+                first, remainder = poproot(child)
+            except ValueError:
+                continue
+            if not remainder:
+                yield first[1:]
+
+    def get_info(self, path):
+        if path == '/':
+            return PathInfo.folder()
+        if path in self.paths:
+            return self.paths[path]
+        raise FileNotFoundError(path)
+
+    def get_contents(self, path):
+        return
+
+    def write_file(self, path, contents):
+        return
+
+
+class VirtualHierarchy(object):
+    def __init__(self, rootfs, pwd):
+        self.pwd = pwd
+        self.mountpoints = dict()
+        self.mount('/', rootfs)
+
+    def abspath(self, path):
+        return abspath(path, self.pwd)
+
+    def get_filesystem_for(self, path):
+        subpaths = [(pnt, subpath(pnt, path)) for pnt in self.mountpoints]
+        mountpoint, sub = max(((point, sub) for point, sub in subpaths
+                                  if sub), key=lambda x:len(x[0]))
+        return self.mountpoints[mountpoint], mountpoint, sub
+
+    def lookup(self, path):
+        path = self.abspath(path)
+        filesystem, basepath, subpath = self.get_filesystem_for(path)
+        return VirtualEntity(self, filesystem, basepath, subpath)
+
+    def mount(self, point, filesystem):
+        point = self.abspath(point)
+        if point.endswith('/'):
+            point = point.rstrip('/')
+        logging.getLogger('vfs').debug("Mounting {} at {}".format(
+            filesystem, point or '/'))
+        self.mountpoints[point] = filesystem
+
+    def mkdir(self, path):
+        filesystem, basepath, subpath = self.get_filesystem_for(path)
+        filesystem.make_directory(subpath)
+
+    def walk(self, path):
+        def visit(item):
+            logging.debug('Visit {}'.format(item))
+            print(item)
+            entity = self.lookup(item)
+            if entity.is_folder():
+                for name in self.list_directory(item):
+                    visit(os.path.join(item, name))
+        visit(abspath(path, self.pwd))
+
+    def list_directory(self, path):
+        filesystem, _, subpath = self.get_filesystem_for(path)
+        return filesystem.list_directory(subpath)
 
 
 class PathInfo(dict):
@@ -114,7 +158,7 @@ class PathInfo(dict):
         return cls(type='file')
 
 
-class SettingsVFS(object):
+class SettingsVFS(VirtualFileSystem):
     def __init__(self, manifest):
         self.manifest = manifest
 
@@ -135,47 +179,38 @@ class SettingsVFS(object):
             return ['module_path']
         raise FileNotFoundError
 
+    def get_contents(self, path):
+        pass
+
+    def make_directory(self, path):
+        pass
+
+    def write_file(self, path, contents):
+        pass
+
 
 class VfsShell(Shell):
     def __init__(self, history, stdin=None, stdout=None, prompt='$',
                  startpath='/', pwdname='pwd', exit_on_error=False):
         Shell.__init__(self, history, stdin=stdin, stdout=stdout,
                        prompt=prompt, exit_on_error=exit_on_error)
-        self.vfs_pwd = startpath
-        self.vfs_root = VirtualFileSystem()
+        self.vfs = VirtualHierarchy(MemoryVFS(), startpath)
         if pwdname:
-            self.environment[pwdname] = Lookup(self, attr='vfs_pwd')
-
-    def vfs_mount(self, name, filesystem):
-        self.vfs_root.mount(name, filesystem)
+            self.environment[pwdname] = Lookup(self.vfs, attr='pwd')
 
     def vfs_get_pwd(self):
-        return self.vfs_root.lookup(self.vfs_pwd)
+        return self.vfs.lookup(self.vfs.pwd)
 
     def do_cd(self, args):
-        path = args[0]
-        if path[0] == '/':
-            self.vfs_pwd = self.vfs_root[path].path()
-        else:
-            self.vfs_pwd = self.vfs_get_pwd()[path].path()
+        self.vfs.cd(args[0] if args else '')
 
     def do_pwd(self, args):
-        print(self.vfs_pwd)
+        print(self.vfs.pwd)
 
     def do_ls(self, args):
-        path = abspath(args[0] if args else '.', self.vfs_pwd)
-        for name in self.vfs_root.lookup(path).list_directory():
+        for name in self.vfs.list_directory(args[0] if args else '.'):
             print(name)
 
     def do_find(self, args):
-        path = abspath(args[0] if args else '.', self.vfs_pwd)
-        def visit(folder):
-            children = folder.list_directory()
-            logging.debug(str(folder.path)+str(children))
-            for name in children:
-                logging.debug(os.path.join(folder.path, name))
-                entity = self.vfs_root.lookup(os.path.join(folder.path, name))
-                print(entity.path)
-                if entity.is_folder():
-                    visit(entity)
-        visit(self.vfs_root.lookup(path))
+        for path in self.vfs.walk(args[0] or '.'):
+            print(path)
