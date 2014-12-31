@@ -196,11 +196,6 @@ class SettingsVFS(VirtualFileSystem):
             return PathInfo.file()
 
     def list_directory(self, path):
-        if path == '/':
-            return ['module_path']
-        raise FileNotFoundError
-
-    def list_directory(self, path):
         if path != '/':
             raise FileNotFoundError(path)
         return ['module_path']
