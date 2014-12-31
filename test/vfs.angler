@@ -1,0 +1,8 @@
+#!/usr/bin/env angler-shell
+
+ls /
+find /
+cd settings
+find
+cat module_path
+
