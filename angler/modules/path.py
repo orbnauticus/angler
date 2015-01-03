@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from angler.plugin import Definition
+from angler.plugin import Definition, main
 
 import os
 import stat
@@ -47,13 +47,13 @@ class Path(Definition):
         try:
             mode = os.lstat(self.path).st_mode
         except FileNotFoundError:
-            return 'absent'
+            return {'absent': {}}
         if stat.S_ISDIR(mode):
-            return 'folder'
+            return {'folder': {}}
         elif stat.S_ISREG(mode):
-            return 'file'
+            return {'file': {}}
         elif stat.S_ISLNK(mode):
-            return 'link'
+            return {'link': {}}
         else:
             return None
 
@@ -63,28 +63,34 @@ class Path(Definition):
         except FileNotFoundError:
             umask = os.umask(0)
             os.umask(umask)
-            return '%o' % (0o777 & ~umask)
-        return '%o' % (stat.S_IMODE(result.st_mode))
+            return {'exact': {'mode': '%o' % (0o777 & ~umask)}}
+        return {'exact': {'mode': '%o' % (stat.S_IMODE(result.st_mode))}}
 
-    def set_state(self, current_state):
+    def set_state(self, old, new):
         if not self.query:
-            self.set_node_state(current_state)
+            self.set_node_state(old, new)
         elif self.query == 'permission':
-            self.set_permission_state(current_state)
+            self.set_permission_state(old, new)
         elif self.query == 'ownership':
-            self.set_ownership_state(current_state)
+            self.set_ownership_state(old, new)
         else:
             raise ValueError("Unknown property {!r}".format(self.query))
 
-    def set_node_state(self, current_state):
-        if current_state != 'absent':
-            if current_state == 'folder':
+    def set_node_state(self, old, new):
+        old_key = list(old.keys())[0]
+        if old_key != 'absent':
+            if old_key == 'folder':
                 shutil.rmtree(self.path)
             else:
                 os.remove(self.path)
-        if self.value == 'folder':
+        new_key = list(self.value.keys())[0]
+        if new_key == 'folder':
             os.mkdir(self.path)
-        elif self.value == 'file':
+        elif new_key == 'file':
             open(self.path, 'w').close()
-        elif self.value == 'link':
+        elif new_key == 'link':
             pass
+
+
+if __name__ == '__main__':
+    main(Path)
