@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from collections import namedtuple
-from inspect import getmembers, isclass
+from inspect import getfile, getmembers, isclass
 from importlib import import_module
 
 import json
@@ -105,21 +105,26 @@ class PluginManager(dict):
             try:
                 for name in os.listdir(folder):
                     if name.endswith('.py'):
-                        self.update(self.load_module_plugins(folder, name))
+                        self.load_module_plugins(folder, name)
             finally:
                 if sys.path[0] == folder:
                     del sys.path[0]
 
     def load_module_plugins(self, folder, module_name):
-        plugins = {}
         module = import_module(module_name[:-3])
-        for _, value in getmembers(module):
+        for class_name, value in getmembers(module):
             if isstrictsubclass(value, Definition):
-                for scheme in value.schemes:
+                for scheme in getattr(value, 'schemes', [class_name.lower()]):
+                    if scheme in self:
+                        self.logger.critical(
+                            'Found multiple handlers for {!r}:'
+                            ' {} and {}'.format(
+                                scheme, getfile(self[scheme]),
+                                os.path.join(folder, module_name)))
+                        exit(1)
                     self.logger.debug('Found handler for {!r} in {}'.format(
                         scheme, os.path.join(folder, module_name)))
-                    plugins[scheme] = value
-        return plugins
+                    self[scheme] = value
 
     def definition_from_node(self, node):
         scheme = node.uri.partition('://')[0]

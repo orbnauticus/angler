@@ -7,8 +7,6 @@ import stat
 
 
 class Path(Definition):
-    schemes = ['path']
-
     def get_parent(self):
         path = os.path.dirname(self.path)
         if path == '/':
