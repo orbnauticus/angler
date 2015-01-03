@@ -58,10 +58,10 @@ def main(*plugins):
     import json
     import sys
 
-    sys.argv[1:] = ['node', 'path', '', '/tmp/angler', '', '']
-    import io
-    #sys.stdin = io.StringIO('{"absent": {}}\n{"file": {}}\n')
-    sys.stdin = io.StringIO('')
+    #sys.argv[1:] = ['node', 'path', '', '/tmp/angler', '', '']
+    #import io
+    ##sys.stdin = io.StringIO('{"absent": {}}\n{"file": {}}\n')
+    #sys.stdin = io.StringIO('')
 
     class fake_manifest(object):
         def __init__(self, node):
