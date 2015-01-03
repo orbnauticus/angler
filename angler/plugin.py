@@ -58,24 +58,93 @@ def main(*plugins):
     import json
     import sys
 
+    sys.argv[1:] = ['node', 'path', '', '/tmp/angler', '', '']
+    import io
+    #sys.stdin = io.StringIO('{"absent": {}}\n{"file": {}}\n')
+    sys.stdin = io.StringIO('')
+
+    class fake_manifest(object):
+        def __init__(self, node):
+            self.node = node
+
+        def add_definition(self, definition):
+            print("node", definition.get_uri(), json.dumps(definition.value))
+
+        def add_order(self, before, after):
+            print("edge", before.get_uri(), after.get_uri())
+
+    def fail():
+        print("""Usage: {} list|get|set|node|incoming|outgoing ...
+
+list
+        List all schemes this plugin can handle, one per line
+
+get scheme host path query fragment
+        Get the current status of this node, output as a json object with
+        one key.
+
+set scheme host path query fragment
+        Set the status of this node. The old and new values are passed as
+        json objects to stdin, one per line.
+
+node scheme host path query fragment
+        Optional hook when a node is encountered for the first time. Prints
+        lines for new automatic nodes and edges in the form:
+        "node uri value_json" or "edge source sink"
+
+incoming|outgoing scheme host path query fragment scheme2 host2 ...
+        Optional hook when an incoming or outgoing edge is encountered for the
+        first time. Prints lines for new automatic nodes and edges in the form:
+        "node uri value_json" or "edge source sink"
+""".format(sys.argv[0]))
+        exit(1)
+
     handlers = dict(
         (scheme, plugin) for plugin in plugins for scheme in
         getattr(plugin, 'schemes', [plugin.__name__.lower()]))
 
-    args = dict(itertools.zip_longest(
-        ['command', 'scheme', 'path', 'query', 'fragment'], sys.argv[1:]))
+    def get_uri():
+        return dict(
+            scheme=sys.argv.pop(1),
+            host=sys.argv.pop(1),
+            path=sys.argv.pop(1),
+            query=sys.argv.pop(1),
+            fragment=sys.argv.pop(1),
+        )
 
-    if args['command'] == 'list':
+    command = sys.argv.pop(1) if len(sys.argv) > 1 else None
+
+    if command == 'list':
         print('\n'.join(handlers))
-    elif args['command'] == 'get':
-        plugin = handlers[args['scheme']]
-        definition = plugin(args['scheme'], '', args['path'], args['query'],
-                            args['fragment'], None)
-        json.dump(definition.get_state(), sys.stdout)
-    elif args['command'] == 'set':
-        plugin = handlers[args['scheme']]
-        definition = plugin(args['scheme'], '', args['path'], args['query'],
-                            args['fragment'], json.load(sys.stdin))
-        definition.set_state()
+        exit(0)
+    elif len(sys.argv[1:]) < 5:
+        fail()
     else:
-        print("Usage: {} command scheme path query".format(sys.argv[0]))
+        uri = get_uri()
+        plugin = handlers[uri['scheme']]
+
+    if command == 'set':
+        old = json.loads(sys.stdin.readline())
+        new = json.loads(sys.stdin.readline())
+        definition = plugin(value=new, **uri)
+    else:
+        definition = plugin(value=None, **uri)
+
+    if command == 'get':
+        json.dump(definition.get_state(), sys.stdout)
+        sys.stdout.write('\n')
+        sys.stdout.flush()
+    elif command == 'set':
+        definition.set_state(old, new)
+    elif command == 'node':
+        manifest = fake_manifest(definition)
+        definition.found_node(manifest)
+    elif command in ('incoming', 'outgoing'):
+        manifest = fake_manifest(definition)
+        other = get_uri()
+        if command == 'incoming':
+            definition.found_incoming_edge(manifest, other)
+        elif command == 'outgoing':
+            definition.found_outgoing_edge(manifest, other)
+    else:
+        fail()
