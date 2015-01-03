@@ -92,39 +92,62 @@ def isstrictsubclass(obj, class_):
     return isclass(obj) and obj is not class_ and issubclass(obj, class_)
 
 
+class PluginLoader:
+    def __init__(self, manager):
+        self.manager = manager
+        if getattr(self, 'logger_name', False):
+            self.logger = manager.logger.getChild(self.logger_name)
+        else:
+            self.logger = manager.logger
+
+
+class PythonPluginLoader(PluginLoader):
+    logger_name = 'python'
+
+    def load(self, folder, name):
+        sys.path.insert(0, folder)
+        try:
+            self.load_module(name)
+        finally:
+            if sys.path[0] == folder:
+                del sys.path[0]
+
+    def load_module(self, name):
+        module = import_module(name[:-3])
+        for class_name, value in getmembers(module):
+            if isstrictsubclass(value, Definition):
+                for scheme in getattr(value, 'schemes', [class_name.lower()]):
+                    self.manager.add(scheme, value)
+
+
 class PluginManager(dict):
     def __init__(self, searchpaths=None):
         self.searchpaths = searchpaths or []
         self.logger = logging.getLogger('plugin')
 
+    def add(self, scheme, plugin):
+        if scheme in self:
+            self.logger.critical(
+                "Found multiple handlers for {!r}: {} and {}".format(
+                    scheme, getfile(self[scheme]), getfile(plugin)))
+            exit(1)
+        self.logger.debug('Found handler for {!r} in {}'.format(
+            scheme, getfile(plugin)))
+        self[scheme] = plugin
+
     def discover(self):
         for folder in self.searchpaths:
             self.logger.debug('Searching {!r} for plugins'.format(
                 os.path.abspath(folder)))
-            sys.path.insert(0, folder)
-            try:
-                for name in os.listdir(folder):
-                    if name.endswith('.py'):
-                        self.load_module_plugins(folder, name)
-            finally:
-                if sys.path[0] == folder:
-                    del sys.path[0]
-
-    def load_module_plugins(self, folder, module_name):
-        module = import_module(module_name[:-3])
-        for class_name, value in getmembers(module):
-            if isstrictsubclass(value, Definition):
-                for scheme in getattr(value, 'schemes', [class_name.lower()]):
-                    if scheme in self:
-                        self.logger.critical(
-                            'Found multiple handlers for {!r}:'
-                            ' {} and {}'.format(
-                                scheme, getfile(self[scheme]),
-                                os.path.join(folder, module_name)))
-                        exit(1)
-                    self.logger.debug('Found handler for {!r} in {}'.format(
-                        scheme, os.path.join(folder, module_name)))
-                    self[scheme] = value
+            for name in os.listdir(folder):
+                path = os.path.join(folder, name)
+                if not os.path.isfile(path):
+                    continue
+                firstline = open(path).readline()
+                if firstline.rstrip() == '#!/usr/bin/env python3':
+                    PythonPluginLoader(self).load(folder, name)
+                else:
+                    self.logger.error('Not sure how to load {}'.format(path))
 
     def definition_from_node(self, node):
         scheme = node.uri.partition('://')[0]
