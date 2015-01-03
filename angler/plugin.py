@@ -51,3 +51,31 @@ class Definition(metaclass=ABCMeta):
                       value=self.value)
         kwargs.update(replacements)
         return self.__class__(**kwargs)
+
+
+def main(*plugins):
+    import itertools
+    import json
+    import sys
+
+    handlers = dict(
+        (scheme, plugin) for plugin in plugins for scheme in
+        getattr(plugin, 'schemes', [plugin.__name__.lower()]))
+
+    args = dict(itertools.zip_longest(
+        ['command', 'scheme', 'path', 'query', 'fragment'], sys.argv[1:]))
+
+    if args['command'] == 'list':
+        print('\n'.join(handlers))
+    elif args['command'] == 'get':
+        plugin = handlers[args['scheme']]
+        definition = plugin(args['scheme'], '', args['path'], args['query'],
+                            args['fragment'], None)
+        json.dump(definition.get_state(), sys.stdout)
+    elif args['command'] == 'set':
+        plugin = handlers[args['scheme']]
+        definition = plugin(args['scheme'], '', args['path'], args['query'],
+                            args['fragment'], json.load(sys.stdin))
+        definition.set_state()
+    else:
+        print("Usage: {} command scheme path query".format(sys.argv[0]))
