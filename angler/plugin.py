@@ -53,6 +53,10 @@ class Definition(metaclass=ABCMeta):
         pass
 
     @abstractmethod
+    def __eq__(self, other):
+        pass
+
+    @abstractmethod
     def get_state(self):
         return
 
