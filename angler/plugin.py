@@ -16,6 +16,14 @@ class Definition(metaclass=ABCMeta):
         self.value = value
         self.logger = logging.getLogger(scheme)
 
+    @property
+    def state(self):
+        return list(self.value.keys())[0]
+
+    @property
+    def properties(self):
+        return self.value[self.state]
+
     def __hash__(self):
         return hash((self.scheme, self.host, self.path, self.query,
                      self.fragment))
@@ -23,6 +31,13 @@ class Definition(metaclass=ABCMeta):
     @classmethod
     def from_node(cls, node):
         return cls(value=node.value, *urisplit(node.uri))
+
+    def replace(self, **kwargs):
+        params = dict(scheme=self.scheme, host=self.host, path=self.path,
+                      query=self.query, fragment=self.fragment,
+                      value=self.value)
+        params.update(kwargs)
+        return self.__class__(**params)
 
     def get_uri(self):
         return urijoin(self.scheme, self.host, self.path, self.query,
