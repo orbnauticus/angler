@@ -220,6 +220,7 @@ class Manifest(object):
                 except Exception as error:
                     logger.exception(
                         "Error loading plugin for {!r}...".format(node.uri))
+                    continue
                 if definition is None:
                     logger.error("No handler was found for {!r}".format(
                         node.uri))
@@ -237,21 +238,21 @@ class Manifest(object):
                     uri, current_state))
         elif not dryrun:
             if logger:
-                logger.info('Applying {} -> {!r}'.format(
-                    uri, definition.value))
+                logger.info('Applying {} {!r} -> {!r}'.format(
+                    uri, current_state, definition.value))
             try:
                 definition.set_state(current_state)
             except Exception as error:
                 if logger:
                     logger.exception(
-                        "Error setting state {!r} on {}".format(
-                            definition.value, uri))
+                        "Error applying {!r} -> {!r} on {}".format(
+                            current_state, definition.value, uri))
                 else:
                     raise
         else:
             if logger:
-                logger.info('Would apply {} -> {!r}'.format(
-                    uri, definition.value))
+                logger.info('Would apply {} {!r} -> {!r}'.format(
+                    uri, current_state, definition.value))
 
 
 default_manifest = 'angler.manifest'
