@@ -158,6 +158,46 @@ class PluginManager(dict):
         return plugin.from_node(node)
 
 
+class Value(dict):
+    def __init__(self, state, properties):
+        self.state = state
+        dict.__init__(self, properties)
+
+    @classmethod
+    def from_dict(cls, value):
+        if len(value) != 1:
+            raise ValueError("Malformed value {!r}".format(value))
+        state = list(value.keys())[0]
+        return cls(state, value[state])
+
+    @classmethod
+    def from_json(cls, json_value):
+        return cls.from_dict(json.loads(json_value))
+
+    def reconcile_with(self, other):
+        if self.status is None:
+            reconciled = Value(other.status, ())
+        elif other.status is None or self.status == other.status:
+            reconciled = Value(self.status, ())
+        else:
+            raise ValueError("Unable to reconcile %r and %r" % (self, other))
+        self_keys = set(self.keys())
+        other_keys = set(other.keys())
+        common_keys = self_keys.intersection(other_keys)
+        for key in self_keys - common_keys:
+            reconciled[key] = self[key]
+        for key in other_keys - common_keys:
+            reconciled[key] = other[key]
+        for key in common_keys:
+            if self[key] is None:
+                reconciled[key] = other[key]
+            elif other[key] is None or self[key] == other[key]:
+                reconciled[key] = self[key]
+            else:
+                raise ValueError("Unable to reconcile %r and %r"
+                                 % (self, other))
+        return reconciled
+
 class Manifest(object):
     def __init__(self, database):
         self.logger = logging.getLogger('manifest')
